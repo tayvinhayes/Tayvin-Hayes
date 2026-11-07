@@ -82,6 +82,8 @@ svg#canvas.drawing{cursor:crosshair}
 .dirs{display:grid;grid-template-columns:repeat(4,42px);gap:4px;flex:0 0 auto}
 .dir{height:48px;font:600 22px var(--body);border:1px solid var(--line);background:var(--field);color:var(--ink);border-radius:6px;cursor:pointer}
 .dir.on{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
+.dirs.eight{grid-template-columns:repeat(3,42px)} .dirs.eight .dir{height:38px;font-size:18px}
+.warn{color:#b9541f;font-weight:500} .qwarn{margin:0;padding:10px 12px;border-radius:6px;border:1px solid #d9a07f;background:color-mix(in srgb,#d4602a 9%,transparent);font-size:14px;line-height:1.45}
 #eb-live{font:600 15px var(--mono);color:var(--accent);text-transform:none;letter-spacing:0}
 .btn:disabled{opacity:.45;cursor:default}
 .ble-state.on{color:var(--good)}
@@ -203,6 +205,7 @@ td .sub{display:block;font-size:12px;color:var(--muted)}
     <div class="quote">
       <div class="panel">
         <div class="qhead"><h1 id="q-title">Flooring estimate</h1><span class="no" id="q-no"></span></div>
+        <p class="qwarn" id="q-warn" hidden></p>
         <div class="tbl"><table>
           <thead><tr><th>Item</th><th class="n">Qty</th><th class="n">Unit</th><th class="n">Material</th><th class="n">Labor</th><th class="n">Line total</th></tr></thead>
           <tbody id="q-body"></tbody>
@@ -269,7 +272,9 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':
 const uid = p => p + Math.random().toString(36).slice(2,8);
 const money = n => '$' + n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const num = (n,d=1) => n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
-function fmtLen(ft){ const inch=Math.round(ft*12); const f=Math.floor(inch/12), i=inch%12; return f+'′'+(i?' '+i+'″':''); }
+const FR=['','⅛','¼','⅜','½','⅝','¾','⅞'];
+function fmtLen(ft){ let e=Math.round(ft*96); const f=Math.floor(e/96); e-=f*96; const i=Math.floor(e/8), fr=e%8; return f+'′'+(i||fr?' '+(i||'')+FR[fr]+'″':''); }
+const fmtIn = ft => { const e=Math.round(Math.abs(ft)*96); const i=Math.floor(e/8), fr=e%8; return (i||(fr?'':'0'))+FR[fr]+'″'; };
 
 // ---- geometry
 function area(p){ let a=0; for(let i=0;i<p.length;i++){const [x1,y1]=p[i],[x2,y2]=p[(i+1)%p.length]; a+=x1*y2-x2*y1;} return a/2; }
@@ -277,7 +282,7 @@ function perim(p){ let s=0; for(let i=0;i<p.length;i++){const [x1,y1]=p[i],[x2,y
 function bbox(p){ const xs=p.map(q=>q[0]), ys=p.map(q=>q[1]); return {x:Math.min(...xs),y:Math.min(...ys),w:Math.max(...xs)-Math.min(...xs),h:Math.max(...ys)-Math.min(...ys)}; }
 function centroid(p){ const A=area(p); if(Math.abs(A)<1e-6){const b=bbox(p);return [b.x+b.w/2,b.y+b.h/2];} let cx=0,cy=0; for(let i=0;i<p.length;i++){const [x1,y1]=p[i],[x2,y2]=p[(i+1)%p.length]; const f=x1*y2-x2*y1; cx+=(x1+x2)*f; cy+=(y1+y2)*f;} return [cx/(6*A),cy/(6*A)]; }
 const snap = v => Math.round(v/SNAP)*SNAP;
-const r96 = v => Math.round(v*96)/96;
+const r96 = v => Math.round(v*1536)/1536; // keep corners to 1/128" so angled walls read back exactly
 function axisOf(p,i){ const a=p[i], b=p[(i+1)%p.length]; const dx=b[0]-a[0], dy=b[1]-a[1]; const L=Math.hypot(dx,dy); if(L<1e-9) return null;
   if(Math.abs(dy)<1e-6) return {ax:'x',s:Math.sign(dx),L}; if(Math.abs(dx)<1e-6) return {ax:'y',s:Math.sign(dy),L}; return {ax:'d',ux:dx/L,uy:dy/L,L}; }
 function needsMeasure(r,i){ if(r.measured[i]) return false; const a=axisOf(r.pts,i); if(!a) return false; if(a.ax==='d') return true;
@@ -291,13 +296,13 @@ function setWall(r,i,L){
   const p=r.pts, n=p.length, w=axisOf(p,i); if(!w) return 'That wall has no length.';
   const delta=L-w.L;
   if(Math.abs(delta)<1/192){ r.measured[i]=true; return true; }
-  if(w.ax==='d'){ const v=(i+1)%n; p[v]=[r96(p[v][0]+w.ux*delta), r96(p[v][1]+w.uy*delta)]; r.measured[i]=true; return true; }
-  const c=[];
-  for(let k=1;k<n;k++){ const j=(i+k)%n, a=axisOf(p,j); if(!a||a.ax!==w.ax) continue; const anti=a.s!==w.s; const nl=anti?a.L+delta:a.L-delta; if(nl<0.05) continue; c.push({k,score:(r.measured[j]?2:0)+(anti?0:1)+k*0.001}); }
-  if(!c.length) return `A ${fmtLen(L)} wall won't fit this shape. Check the reading, or drag the corners first.`;
-  c.sort((a,b)=>a.score-b.score); const k=c[0].k;
-  const dx=w.ax==='x'?w.s*delta:0, dy=w.ax==='y'?w.s*delta:0;
-  for(let m=1;m<=k;m++){ const v=(i+m)%n; p[v]=[r96(p[v][0]+dx), r96(p[v][1]+dy)]; }
+  const tx = w.ax==='x'?w.s*delta : w.ax==='y'?0 : w.ux*delta, ty = w.ax==='y'?w.s*delta : w.ax==='x'?0 : w.uy*delta;
+  const backup=p.map(q=>[...q]);
+  const shift=(ax,amt)=>{ if(Math.abs(amt)<1e-9) return true; const c=[];
+    for(let k=1;k<n;k++){ const j=(i+k)%n, a=axisOf(p,j); if(!a||a.ax!==ax) continue; const nv=a.s*a.L-amt; if(Math.sign(nv)!==a.s||Math.abs(nv)<0.05) continue; c.push({k,score:(r.measured[j]?2:0)+(Math.sign(amt)===-a.s?0:1)+k*0.001}); }
+    if(!c.length) return false; c.sort((a,b)=>a.score-b.score); const k=c[0].k; r.measured[(i+k)%n]=false;
+    for(let m=1;m<=k;m++){ const v=(i+m)%n; p[v]=[r96(p[v][0]+(ax==='x'?amt:0)), r96(p[v][1]+(ax==='y'?amt:0))]; } return true; };
+  if(!shift('x',tx) || !shift('y',ty)){ r.pts=backup; return `A ${fmtLen(L)} wall won't fit this shape. Check the reading, or drag the corners first.`; }
   r.measured[i]=true; return true; }
 function toWorld(e){ const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; const w=pt.matrixTransform(svg.getScreenCTM().inverse()); return [w.x,w.y]; }
 
@@ -393,6 +398,8 @@ function render(){
 }
 
 // ---- side panels
+// How many more readings the room needs: on each axis one unmeasured wall can be worked out from the others; angled walls always need a reading.
+const needCount = r => { const c={x:0,y:0,d:0}; r.pts.forEach((_,i)=>{ const a=axisOf(r.pts,i); if(a&&!r.measured[i]) c[a.ax]++; }); return Math.max(0,c.x-1)+Math.max(0,c.y-1)+c.d; };
 function renderRooms(){
   $('room-count').textContent = S.rooms.length ? S.rooms.length+' total' : '';
   if(!S.rooms.length){ $('rooms').innerHTML='<p class="empty">No rooms yet. Tap <b>Draw room</b> and click corners on the grid, or add a quick rectangle above.</p>'; return; }
@@ -401,6 +408,7 @@ function renderRooms(){
     return `<div class="room${r.id===selected?' sel':''}" style="--c:${c}" data-id="${r.id}">
       <div class="top"><input id="rn-${r.id}" data-f="name" value="${esc(r.name)}" aria-label="Room name"><button class="btn ghost danger" data-del="${r.id}" aria-label="Delete ${esc(r.name)}">✕</button></div>
       <select id="rp-${r.id}" data-f="productId" aria-label="Flooring">${opts(r.productId)}</select>
+      ${needCount(r)?`<div class="meta"><span class="warn">⚠ ${needCount(r)} wall${needCount(r)>1?'s':''} not measured · size is a sketch</span></div>`:''}${r.gap>1/12?`<div class="meta"><span class="warn">⚠ closed with a ${fmtIn(r.gap)} gap</span></div>`:''}
       <div class="meta"><span><b>${num(e.area,1)}</b> sq ft · <b>${num(e.perim,1)}</b> lf</span><span>${e.p?`<b>${e.unit==='sy'?num(e.qty,1):e.qty}</b> ${e.unit==='sy'?'sq yd':(e.qty===1?'box':'boxes')}`:''}</span></div>
       ${e.p?`<div class="meta"><span>${e.detail}</span></div>`:''}
       <label class="check"><input type="checkbox" id="rb-${r.id}" data-f="base"${r.base?' checked':''}> Baseboard</label>
@@ -413,7 +421,8 @@ function renderEdit(msg,cls){
   if(mode==='draw'){ const n=draft.length, metric=$('m-unit').value==='m';
     const help = n ? 'Drag to aim, lift to drop the next corner. Or pick a direction, then shoot the D2 or type a length.' : 'Tap where the room starts, or pick a direction and shoot the first wall with the D2.';
     eb.innerHTML=`<div class="eb-row"><span class="eb-label">${n?`Drawing · ${n-1} wall${n-1===1?'':'s'}`:'Draw a room'} <span id="eb-live"></span></span></div>
-    <div class="eb-row"><div class="dirs" role="group" aria-label="Next wall direction">${[3,2,0,1].map(d=>`<button class="dir${d===heading?' on':''}" data-dir="${d}" aria-label="Next wall ${DIRS[d][2]}">${DIRS[d][3]}</button>`).join('')}</div>
+    <div class="eb-row"><div class="dirs${ang45?' eight':''}" role="group" aria-label="Next wall direction">${(ang45?[5,6,7,4,-1,0,3,2,1]:[6,4,0,2]).map(d=>d<0?'<span></span>':`<button class="dir${d===heading?' on':''}" data-dir="${d}" aria-label="Next wall ${DIRS[d][2]}">${DIRS[d][3]}</button>`).join('')}</div>
+      <button class="btn big" id="eb-ang" aria-pressed="${ang45}" title="Allow 45° walls">45°</button>
       ${metric?'<div class="lenbox"><input id="eb-ft" inputmode="decimal" autocomplete="off" aria-label="Length in meters"><span>m</span></div>':'<div class="lenbox"><input id="eb-ft" inputmode="decimal" autocomplete="off" aria-label="Feet"><span>ft</span></div><div class="lenbox"><input id="eb-in" inputmode="decimal" autocomplete="off" aria-label="Inches"><span>in</span></div>'}
       <button class="btn primary big" id="eb-add">Add wall</button></div>
     <div class="eb-row"><button class="btn big" id="eb-dundo"${n?'':' disabled'}>Undo</button><button class="btn primary big" id="eb-close"${n>=3?'':' disabled'}>Close room</button><button class="btn ghost big" id="eb-dcancel">Cancel</button></div>
@@ -424,7 +433,7 @@ function renderEdit(msg,cls){
   const a=axisOf(r.pts,selWall), st=wallState(r,selWall), L=a?a.L:0;
   const stTxt= st==='done'?'measured':st==='need'?'needs measuring':'set by the other walls';
   const complete=nextNeeded(r,-1)==null;
-  if(!msg){ msg= complete?`All walls measured · ${num(Math.abs(area(r.pts)),1)} sq ft`:`Shoot the ${sideOf(r,selWall)} wall with the D2, or type its length and tap Set.`; cls=complete?'ok':''; }
+  if(!msg){ const nc=needCount(r); msg= complete?`All walls measured · ${num(Math.abs(area(r.pts)),1)} sq ft`+(r.gap>1/12?` · closed with a ${fmtIn(r.gap)} gap`:''):`${nc} wall${nc>1?'s':''} left to measure. Shoot the ${sideOf(r,selWall)} wall with the D2, or type its length and tap Set.`; cls=complete?(r.gap>1/12?'err':'ok'):''; }
   const metric=$('m-unit').value==='m'; const ft=Math.floor(L+1e-9), inch=Math.round((L-ft)*12*8)/8;
   eb.innerHTML=`<div class="eb-row"><input id="eb-name" value="${esc(r.name)}" aria-label="Room name"><select id="eb-prod" aria-label="Flooring">${productOptions(r.productId)}</select><button class="btn ghost danger" id="eb-del" aria-label="Delete room" title="Delete room">✕</button></div>
     <div class="chips" role="group" aria-label="Walls">${chips}</div>
@@ -469,6 +478,11 @@ function renderQuote(){
   $('j-customer').value=j.customer; $('j-address').value=j.address; $('j-tax').value=j.tax; $('j-markup').value=j.markup;
   $('q-title').textContent = j.customer ? 'Estimate for '+j.customer : 'Flooring estimate';
   $('q-no').textContent = j.no + (j.address?' · '+j.address:'');
+  const rough=S.rooms.filter(r=>needCount(r)), gappy=S.rooms.filter(r=>r.gap>1/12), noFloor=S.rooms.filter(r=>!prod(r.productId));
+  const notes=[]; if(rough.length) notes.push(`${rough.map(r=>r.name).join(', ')} ${rough.length>1?'have':'has'} walls that weren't measured, so ${rough.length>1?'those sizes are':'that size is'} only a sketch.`);
+  if(gappy.length) notes.push(`${gappy.map(r=>`${r.name} (${fmtIn(r.gap)})`).join(', ')} closed with a gap. Reshoot if that seems high.`);
+  if(noFloor.length) notes.push(`${noFloor.map(r=>r.name).join(', ')} ${noFloor.length>1?'have':'has'} no flooring picked and ${noFloor.length>1?'aren\'t':'isn\'t'} in this quote.`);
+  $('q-warn').hidden=!notes.length; $('q-warn').textContent = notes.length ? 'Before you send this: '+notes.join(' ') : '';
   let h = q.lines.map(l=>{ const p=l.p; const unit=p.kind==='roll'?'sq yd':'box';
     const sub = p.kind==='roll'? `${money(p.price)}/sy + ${money(p.pad||0)} pad · ${num(l.area,1)} sq ft` : `${money(p.price)}/box · ${num(l.area,1)} sq ft at ${p.waste}% waste`;
     return `<tr><td><span class="sw" style="--c:${p.color}"></span>${esc(p.name)}<span class="sub">${esc(l.rooms.join(', '))} · ${sub}</span></td><td class="n">${p.kind==='roll'?num(l.qty,1):l.qty}</td><td class="n">${unit}</td><td class="n">${money(l.mat*q.mk)}</td><td class="n">${money(l.lab*q.mk)}</td><td class="n">${money((l.mat+l.lab)*q.mk)}</td></tr>`; }).join('');
@@ -486,7 +500,7 @@ function setMode(m){ mode=m; draft=[]; draftKeys=new Set(); hover=null; aim=null
   $('hint').textContent = m==='draw' ? 'Drag to aim · lift to drop a corner · two fingers to zoom' : 'Tap a wall to measure it · drag a wall to move it'; render(); renderEdit(); }
 const gridStep = () => view.w<14 ? 1/12 : view.w<45 ? 0.5 : 1;
 const segKey = (a,b) => [a,b].map(q=>r96(q[0])+','+r96(q[1])).sort().join('|');
-const dirOf = (a,b) => { const dx=b[0]-a[0], dy=b[1]-a[1]; return Math.abs(dx)>=Math.abs(dy) ? (dx>=0?0:2) : (dy>=0?1:3); };
+const dirOf = (a,b) => ((Math.round(Math.atan2(b[1]-a[1],b[0]-a[0])/(Math.PI/4))%8)+8)%8;
 // Where a finger at `raw` puts the next corner: walls lock horizontal/vertical, lengths snap to the grid, and corners line up with nearby corners.
 function drawSnap(raw){
   const px=view.w/(svg.clientWidth||700), tol=24*px, g=gridStep(), last=draft[draft.length-1];
@@ -494,8 +508,9 @@ function drawSnap(raw){
   if(draft.length>=3 && Math.hypot(raw[0]-draft[0][0],raw[1]-draft[0][1])<tol*1.5) return {pt:[...draft[0]],close:true};
   if(!last){ let best=null,bd=tol; for(const c of cands){ const d=Math.hypot(raw[0]-c[0],raw[1]-c[1]); if(d<bd){bd=d;best=c;} }
     return {pt: best?[...best]:[r96(Math.round(raw[0]/g)*g), r96(Math.round(raw[1]/g)*g)]}; }
-  const dx=raw[0]-last[0], dy=raw[1]-last[1];
-  if(Math.abs(dx)>=Math.abs(dy)){ let x=last[0]+Math.round(dx/g)*g, gx=null, bd=tol;
+  const dx=raw[0]-last[0], dy=raw[1]-last[1], di=dirOf(last,raw);
+  if(ang45 && di%2===1){ const u=DIRS[di]; const len=Math.max(0,Math.round((dx*u[0]+dy*u[1])/g)*g); return {pt:[r96(last[0]+u[0]*len), r96(last[1]+u[1]*len)]}; }
+  if(ang45 ? (di===0||di===4) : Math.abs(dx)>=Math.abs(dy)){ let x=last[0]+Math.round(dx/g)*g, gx=null, bd=tol;
     for(const c of cands){ if(c===last) continue; const d=Math.abs(raw[0]-c[0]); if(d<bd){bd=d;x=c[0];gx=c[0];} }
     return {pt:[r96(x),last[1]],guideX:gx}; }
   let y=last[1]+Math.round(dy/g)*g, gy=null, bd=tol;
@@ -506,36 +521,41 @@ function liveUpdate(){ const el=$('eb-live'); if(!el) return; if(!aim){ el.textC
   if(!last){ el.textContent='lift to start here'; return; } const L=Math.hypot(aim.pt[0]-last[0],aim.pt[1]-last[1]); el.textContent= L>0 ? `${fmtLen(L)} ${DIRS[dirOf(last,aim.pt)][3]}` : ''; }
 function placeAim(){ const a=aim; aim=null; if(!a) return; if(a.close){ hover=null; closeDraft(); return; }
   const last=draft[draft.length-1]; if(last && Math.hypot(a.pt[0]-last[0],a.pt[1]-last[1])<1e-6){ render(); renderEdit(); return; }
-  draft.push(a.pt); if(last) heading=(dirOf(last,a.pt)+1)%4; render(); renderEdit(); }
+  draft.push(a.pt); if(last) heading=(dirOf(last,a.pt)+2)%8; render(); renderEdit(); }
 function cleanPts(p){ const pts=p.map(q=>[...q]); let again=true;
   while(again && pts.length>=3){ again=false; for(let i=0;i<pts.length;i++){ const n=pts.length, a=pts[(i-1+n)%n], b=pts[i], c=pts[(i+1)%n];
     const cr=(b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0]); if(Math.hypot(b[0]-a[0],b[1]-a[1])<1e-6 || Math.abs(cr)<1e-6){ pts.splice(i,1); again=true; break; } } }
   return pts; }
-function closeDraft(){
+function closeDraft(autoGap){
   if(draft.length<3){ renderEdit('Add at least two walls before closing the room.','err'); return; }
   let pts=draft.map(q=>[...q]); const f=pts[0]; let l=pts[pts.length-1];
   const ex=Math.abs(f[0]-l[0]), ey=Math.abs(f[1]-l[1]);
-  if(ex>1e-6 && ey>1e-6){ const n=pts.length, pl=pts[n-2], lastHoriz=Math.abs(pl[1]-l[1])<1e-6;
-    if((lastHoriz ? ey<0.75 : ex<0.75) && n>=4){ // small gap from real-world readings: slide the last wall onto the start line
+  let gap=typeof autoGap==='number'?autoGap:0;
+  if(ex>1e-6 && ey>1e-6){ const n=pts.length, pl=pts[n-2], lastHoriz=Math.abs(pl[1]-l[1])<1e-6, lastVert=Math.abs(pl[0]-l[0])<1e-6;
+    if((lastHoriz||lastVert) && (lastHoriz ? ey<0.75 : ex<0.75) && n>=4){ // small gap from real-world readings: slide the last wall onto the start line
+      gap = Math.max(gap, lastHoriz ? ey : ex);
       if(lastHoriz){ pts[n-1][1]=f[1]; pts[n-2][1]=f[1]; } else { pts[n-1][0]=f[0]; pts[n-2][0]=f[0]; } }
     else pts.push(lastHoriz?[l[0],f[1]]:[f[0],l[1]]); }
   pts=cleanPts(pts);
   if(pts.length<3 || Math.abs(area(pts))<0.25){ renderEdit('That shape has no floor area. Tap Undo and try again.','err'); return; }
   const measured=pts.map((q,i)=>draftKeys.has(segKey(q,pts[(i+1)%pts.length])));
-  const id=uid('r'); S.rooms.push({id,name:'Room '+(S.rooms.length+1),pts,productId:S.products[0]?.id||'',base:true,measured});
+  const id=uid('r'); S.rooms.push({id,name:'Room '+(S.rooms.length+1),pts,productId:S.products[0]?.id||'',base:true,measured,gap: gap>1/96?gap:0});
   save(); setMode('select'); selectRoom(id); wallPicked=false; fit();
-  const r=selRoom(); if(r && nextNeeded(r,-1)==null) renderEdit(`${r.name} closed · ${num(Math.abs(area(r.pts)),1)} sq ft. Name it and pick flooring above.`,'ok'); }
+  const r=selRoom(); if(!r) return; const sq=num(Math.abs(area(r.pts)),1);
+  if(gap>1/12) renderEdit(`⚠ Your readings missed the starting corner by ${fmtIn(gap)}, so the last wall was moved to close the room (${sq} sq ft). If that's more than you'd expect, reshoot the walls.`,'err');
+  else if(nextNeeded(r,-1)==null) renderEdit(`${r.name} closed · ${sq} sq ft${gap>0?` (readings met within ${fmtIn(gap)})`:''}. Name it and pick flooring above.`,'ok');
+  else renderEdit(`Room drawn. For an exact size, shoot each orange wall with the D2. Start with the ${sideOf(r,selWall)} wall.`); }
 function addSegment(L,dir){
   if(mode!=='draw'){ selected=null; selWall=null; setMode('draw'); renderRooms(); }
   if(!draft.length){ const all=S.rooms.flatMap(r=>r.pts); draft.push([all.length?snap(Math.max(...all.map(q=>q[0]))+3):0, all.length?snap(Math.min(...all.map(q=>q[1]))):0]); }
   const last=draft[draft.length-1], d=DIRS[dir], np=[r96(last[0]+d[0]*L), r96(last[1]+d[1]*L)];
-  draftKeys.add(segKey(last,np)); draft.push(np); heading=(dir+1)%4;
-  if(draft.length>=5 && Math.hypot(np[0]-draft[0][0],np[1]-draft[0][1])<0.75){ draftKeys.add(segKey(last,draft[0])); closeDraft(); return; }
+  draftKeys.add(segKey(last,np)); draft.push(np); heading=(dir+2)%8;
+  const miss=Math.hypot(np[0]-draft[0][0],np[1]-draft[0][1]); if(draft.length>=5 && miss<0.75){ draftKeys.add(segKey(last,draft[0])); closeDraft(miss); return; }
   const m=fs0()*2; if(np[0]<view.x+m||np[0]>view.x+view.w-m||np[1]<view.y+m||np[1]>view.y+view.h-m) fit(); else render();
   renderEdit(`Wall ${draft.length-1}: ${fmtLen(L)} ${DIRS[dir][3]}. Next wall goes ${DIRS[heading][2]}. Tap an arrow to change it.`); }
 const fs0 = () => view.w/(svg.clientWidth||700)*14;
 function undoPoint(){ if(!draft.length) return; const gone=draft.pop(); const prev=draft[draft.length-1]; if(prev) draftKeys.delete(segKey(prev,gone));
-  heading = draft.length>=2 ? (dirOf(draft[draft.length-2],draft[draft.length-1])+1)%4 : 0; render(); renderEdit(); }
+  heading = draft.length>=2 ? (dirOf(draft[draft.length-2],draft[draft.length-1])+2)%8 : 0; render(); renderEdit(); }
 function finishDraft(){ closeDraft(); }
 $('add-rect').onclick=()=>addTemplate('rect'); $('add-l').onclick=()=>addTemplate('L');
 $('mode-select').onclick=()=>setMode('select'); $('mode-draw').onclick=()=>{selected=null;selWall=null;setMode('draw');renderRooms();};
@@ -619,6 +639,7 @@ eb.addEventListener('click',e=>{
     if(d){ heading=+d.dataset.dir; eb.querySelectorAll('.dir').forEach(b=>b.classList.toggle('on',+b.dataset.dir===heading)); return; }
     if(e.target.id==='eb-add'){ const L=readEditLen(); if(!(L>0)){ renderEdit('Type a length first, like 12 ft 6 in.','err'); return; } addSegment(L,heading); return; }
     if(e.target.id==='eb-dundo'){ undoPoint(); return; }
+    if(e.target.id==='eb-ang'){ ang45=!ang45; if(!ang45&&heading%2) heading=(heading+7)%8; renderEdit(ang45?'45° walls on. Drag at an angle, or use the corner arrows.':'Walls lock to 90° again.'); return; }
     if(e.target.id==='eb-close'){ closeDraft(); return; }
     if(e.target.id==='eb-dcancel'){ setMode('select'); return; }
     return; }
@@ -661,7 +682,9 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{ const v=b.dat
   if(v==='products') renderProducts(); if(v==='quote') renderQuote(); if(v==='plan'){ all(); requestAnimationFrame(fit); } });
 
 // ---- directions for drawing by length: [dx, dy, word, arrow]
-const DIRS=[[1,0,'right','→'],[0,1,'down','↓'],[-1,0,'left','←'],[0,-1,'up','↑']];
+const D45=Math.SQRT1_2;
+const DIRS=[[1,0,'right','→'],[D45,D45,'down-right','↘'],[0,1,'down','↓'],[-D45,D45,'down-left','↙'],[-1,0,'left','←'],[-D45,-D45,'up-left','↖'],[0,-1,'up','↑'],[D45,-D45,'up-right','↗']];
+let ang45=false;
 let heading=0;
 function parseLen(s,unit){ s=String(s).trim().toLowerCase().replace(/,/g,'.'); if(!s) return NaN; let m;
   if(m=s.match(/^([\d.]+)\s*mm$/)) return +m[1]/304.8;
