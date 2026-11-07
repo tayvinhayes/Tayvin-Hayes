@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Floorplot Takeoff</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: drafting sheet — plan canvas left, takeoff rail right; stacks on phones */
+:root{
+  --paper:#e9ece7; --sheet:#f8f9f6; --ink:#1c2830; --muted:#5d6a6f; --line:#c6cdc6;
+  --grid:#dfe3dd; --grid-major:#c9d0c8; --accent:#d4602a; --accent-ink:#fff; --sel:#1f6fb2;
+  --good:#2e7d4f; --field:#ffffff;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#11171a; --sheet:#182025; --ink:#e3e8e4; --muted:#93a0a3; --line:#2e3a3f;
+  --grid:#1f292e; --grid-major:#2b373d; --accent:#ec7840; --accent-ink:#1a0e08; --sel:#5aa6e6;
+  --good:#5cc08a; --field:#10161a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#11171a; --sheet:#182025; --ink:#e3e8e4; --muted:#93a0a3; --line:#2e3a3f;
+  --grid:#1f292e; --grid-major:#2b373d; --accent:#ec7840; --accent-ink:#1a0e08; --sel:#5aa6e6;
+  --good:#5cc08a; --field:#10161a; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--sheet)}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--sheet);border-bottom:1px solid var(--line)}
+header .wrap{display:flex;align-items:center;gap:16px;padding-block:10px;flex-wrap:wrap}
+.brand{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:.02em;display:flex;align-items:center;gap:8px}
+.brand svg{width:22px;height:22px}
+.brand small{font-family:var(--mono);font-weight:400;font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+nav{display:flex;gap:4px;margin-left:auto}
+nav button{font:600 14px var(--display);letter-spacing:.08em;text-transform:uppercase;background:none;border:1px solid transparent;color:var(--muted);padding:6px 12px;border-radius:4px;cursor:pointer}
+nav button[aria-selected="true"]{color:var(--ink);border-color:var(--line);background:var(--paper)}
+main{padding-block:16px}
+.view[hidden]{display:none!important}
+.plan{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:16px;align-items:start}
+@media (max-width:880px){.plan{grid-template-columns:minmax(0,1fr)}}
+.board{background:var(--sheet);border:1px solid var(--line);border-radius:6px;overflow:hidden;min-width:0}
+.toolbar{display:flex;gap:6px;flex-wrap:wrap;padding:8px;border-bottom:1px solid var(--line);align-items:center}
+.btn{font:500 14px var(--body);background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:6px 10px;cursor:pointer;line-height:1.2}
+.btn:hover{border-color:var(--muted)}
+.btn[aria-pressed="true"]{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn.ghost{background:none}
+.btn.danger{color:#c0392b}
+.btn:focus-visible,input:focus-visible,select:focus-visible,nav button:focus-visible{outline:2px solid var(--sel);outline-offset:2px}
+.sep{width:1px;align-self:stretch;background:var(--line);margin:0 2px}
+.hint{font:12px var(--mono);color:var(--muted);margin-left:auto}
+svg#canvas{display:block;width:100%;height:min(68vh,640px);touch-action:none;cursor:default;background:var(--sheet);user-select:none}
+svg#canvas.drawing{cursor:crosshair}
+.statbar{display:flex;gap:20px;flex-wrap:wrap;padding:10px 12px;border-top:1px solid var(--line);font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums}
+.statbar b{font-weight:500;color:var(--ink)}
+.statbar span{color:var(--muted)}
+.editbar{border-bottom:1px solid var(--line);padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--paper)}
+.eb-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#eb-name{flex:1 1 100px;font-weight:600}
+#eb-prod{flex:1 1 140px}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.chip{font:500 13px var(--mono);border:1px solid var(--line);background:var(--field);color:var(--ink);border-radius:999px;padding:7px 11px;white-space:nowrap;cursor:pointer;font-variant-numeric:tabular-nums}
+.chip.need{border-color:var(--accent);color:var(--accent)}
+.chip.auto{color:var(--muted);border-style:dashed}
+.chip.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);border-style:solid}
+.eb-label{font:600 16px var(--display);letter-spacing:.04em;text-transform:uppercase;flex:1 1 100%}
+.eb-label span{font:400 13px var(--body);text-transform:none;letter-spacing:0;color:var(--muted)}
+.lenbox{display:flex;align-items:center;gap:4px;flex:1 1 64px;min-width:0}
+.lenbox input{font:500 22px var(--mono);height:48px;text-align:right}
+.lenbox span{font:13px var(--mono);color:var(--muted)}
+.btn.big{height:48px;padding:0 16px;font-size:16px}
+.eb-msg{font-size:14px;color:var(--muted);line-height:1.4}
+.eb-msg.ok{color:var(--good)} .eb-msg.err{color:#c0392b}
+.editbar.flash{box-shadow:inset 0 0 0 3px var(--good)}
+.ble-state{font:12px var(--mono);color:var(--muted)}
+.ble-state.on{color:var(--good)}
+@media (max-width:600px){.btn{padding:9px 12px} svg#canvas{height:56vh} .hint,#zin,#zout,.toolbar .sep{display:none} .brand small{display:none} .board{margin-inline:-6px}}
+@media (prefers-reduced-motion:no-preference){.editbar{transition:box-shadow .3s}}
+.rail{display:flex;flex-direction:column;gap:12px;min-width:0}
+.panel{background:var(--sheet);border:1px solid var(--line);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.panel h2{font:600 15px var(--display);letter-spacing:.1em;text-transform:uppercase;margin:0;color:var(--muted);display:flex;justify-content:space-between;align-items:baseline}
+.row{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);flex:1;min-width:0}
+input,select,textarea{font:15px var(--body);color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:4px;padding:6px 8px;width:100%;min-width:0}
+input[type=number]{font-family:var(--mono);font-size:14px}
+input[type=checkbox]{width:auto}
+.rooms{display:flex;flex-direction:column;gap:8px}
+.room{border:1px solid var(--line);border-left:5px solid var(--c);border-radius:4px;padding:8px;display:flex;flex-direction:column;gap:6px;background:var(--sheet)}
+.room.sel{border-color:var(--sel);border-left-color:var(--c);box-shadow:0 0 0 1px var(--sel)}
+.room .top{display:flex;gap:6px;align-items:center}
+.room .top input{font-weight:600}
+.room .meta{display:flex;justify-content:space-between;gap:8px;font:12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums;flex-wrap:wrap}
+.room .meta b{color:var(--ink);font-weight:500}
+.check{flex-direction:row;align-items:center;gap:6px;font-size:13px;color:var(--ink);flex:0 0 auto}
+.empty{font-size:14px;color:var(--muted);line-height:1.5}
+.products{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.prod{border-top:5px solid var(--c)}
+.prod .kind{font:11px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.quote{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+@media (max-width:880px){.quote{grid-template-columns:minmax(0,1fr)}}
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:560px}
+th{font:600 12px var(--display);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px;border-bottom:2px solid var(--ink)}
+td{padding:8px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:top}
+td.n,th.n{text-align:right;font-family:var(--mono);font-size:13px}
+td .sub{display:block;font-size:12px;color:var(--muted)}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--c);margin-right:6px;vertical-align:baseline}
+.totals{display:flex;flex-direction:column;gap:6px;font-variant-numeric:tabular-nums}
+.totals div{display:flex;justify-content:space-between;font-family:var(--mono);font-size:14px}
+.totals .grand{border-top:2px solid var(--ink);padding-top:8px;margin-top:4px;font:700 26px var(--display);letter-spacing:.02em}
+.qhead{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline}
+.qhead h1{font:700 30px var(--display);margin:0;text-wrap:balance}
+.qhead .no{font:12px var(--mono);color:var(--muted)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--sheet);padding:10px 14px;border-radius:6px;display:flex;gap:12px;align-items:center;font-size:14px;z-index:20}
+.toast button{background:none;border:0;color:var(--accent);font:600 14px var(--body);cursor:pointer}
+@media (prefers-reduced-motion:no-preference){.room,.btn{transition:border-color .15s,box-shadow .15s}}
+</style>
+
+<header><div class="wrap">
+  <div class="brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 12h9v9" stroke="var(--accent)"/></svg>Floorplot <small>takeoff &amp; quote</small></div>
+  <nav role="tablist">
+    <button role="tab" id="tab-plan" aria-selected="true" data-view="plan">Plan</button>
+    <button role="tab" id="tab-products" aria-selected="false" data-view="products">Products</button>
+    <button role="tab" id="tab-quote" aria-selected="false" data-view="quote">Quote</button>
+  </nav>
+  <button class="btn ghost" id="new-job">New job</button>
+</div></header>
+
+<main class="wrap">
+  <!-- PLAN -->
+  <section class="view" id="view-plan">
+    <div class="plan">
+      <div class="board">
+        <div class="toolbar">
+          <button class="btn" id="ble-connect" hidden>Connect D2</button>
+          <button class="btn ghost" id="ble-disconnect" hidden>Disconnect</button>
+          <span id="ble-state" class="ble-state"></span>
+          <button class="btn primary" id="add-rect">+ Rectangle</button>
+          <button class="btn" id="add-l">+ L-shape</button>
+          <button class="btn" id="mode-draw" aria-pressed="false">Draw</button>
+          <button class="btn" id="mode-select" aria-pressed="true" hidden>Select</button>
+          <button class="btn ghost" id="undo-pt" hidden>Undo point</button>
+          <button class="btn ghost" id="finish" hidden>Close shape</button>
+          <button class="btn ghost" id="cancel" hidden>Cancel</button>
+          <span class="sep"></span>
+          <button class="btn ghost" id="zin" aria-label="Zoom in">+</button>
+          <button class="btn ghost" id="zout" aria-label="Zoom out">−</button>
+          <button class="btn ghost" id="fit">Fit</button>
+          <span class="hint" id="hint">Tap a wall to measure it</span>
+        </div>
+        <div class="editbar" id="editbar" aria-live="polite"></div>
+        <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="g1" width="1" height="1" patternUnits="userSpaceOnUse"><path d="M1 0H0V1" fill="none" stroke="var(--grid)" stroke-width="0.04"/></pattern>
+            <pattern id="g5" width="5" height="5" patternUnits="userSpaceOnUse"><rect width="5" height="5" fill="url(#g1)"/><path d="M5 0H0V5" fill="none" stroke="var(--grid-major)" stroke-width="0.07"/></pattern>
+          </defs>
+          <rect id="gridbg" fill="url(#g5)"/>
+          <g id="layer"></g>
+        </svg>
+        <div class="statbar" id="statbar"></div>
+      </div>
+      <div class="rail">
+        <div class="panel">
+          <h2>Laser walk</h2>
+          <p class="empty" style="margin:0;font-size:13px">For odd-shaped rooms. With no room selected, shoot each wall in order around the room. Each reading draws the next wall and turns right. Tap <b>Turn left</b> before a wall that turns left. The room closes when you get back to the start.</p>
+          <div class="row">
+            <label>Type a reading<input id="m-in" inputmode="decimal" autocomplete="off" placeholder="12.5 = 12′ 6″"></label>
+            <label style="flex:0 0 96px">Units<select id="m-unit"><option value="ft">feet</option><option value="m">meters</option></select></label>
+          </div>
+          <div class="row" style="align-items:center">
+            <span id="m-head" style="font:13px var(--mono);flex:1">Next wall east →</span>
+            <button class="btn ghost" data-turn="-1">↶ Turn left</button>
+            <button class="btn ghost" data-turn="1">↷ Turn right</button>
+          </div>
+          <div id="m-log" style="font:12px var(--mono);color:var(--muted);display:flex;flex-direction:column;gap:2px"></div>
+        </div>
+        <div class="panel">
+          <h2>Rooms <span id="room-count" style="font-family:var(--mono);font-size:12px;letter-spacing:0"></span></h2>
+          <div class="rooms" id="rooms"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRODUCTS -->
+  <section class="view" id="view-products" hidden>
+    <div class="panel" style="margin-bottom:12px">
+      <h2>Catalog</h2>
+      <div class="row">
+        <label>Baseboard material ($/lf)<input id="bb-price" type="number" step="0.05" min="0"></label>
+        <label>Baseboard labor ($/lf)<input id="bb-labor" type="number" step="0.05" min="0"></label>
+        <button class="btn" id="add-roll">+ Roll good</button>
+        <button class="btn" id="add-box">+ Boxed good</button>
+      </div>
+    </div>
+    <div class="products" id="products"></div>
+  </section>
+
+  <!-- QUOTE -->
+  <section class="view" id="view-quote" hidden>
+    <div class="quote">
+      <div class="panel">
+        <div class="qhead"><h1 id="q-title">Flooring estimate</h1><span class="no" id="q-no"></span></div>
+        <div class="tbl"><table>
+          <thead><tr><th>Item</th><th class="n">Qty</th><th class="n">Unit</th><th class="n">Material</th><th class="n">Labor</th><th class="n">Line total</th></tr></thead>
+          <tbody id="q-body"></tbody>
+        </table></div>
+      </div>
+      <div class="rail">
+        <div class="panel">
+          <h2>Job</h2>
+          <label>Customer<input id="j-customer"></label>
+          <label>Job address<input id="j-address"></label>
+          <div class="row">
+            <label>Tax on materials (%)<input id="j-tax" type="number" step="0.025" min="0"></label>
+            <label>Markup (%)<input id="j-markup" type="number" step="1" min="0"></label>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Totals</h2>
+          <div class="totals" id="q-totals"></div>
+          <button class="btn primary" id="copy-quote">Copy quote as text</button>
+          <button class="btn ghost" id="reset">Load sample job</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast" hidden><span id="toast-msg"></span><button id="toast-undo">Undo</button></div>
+<div class="toast" id="confirm" hidden><span>Start a new job? Rooms and customer info get cleared. Products and prices stay.</span><button id="cf-yes">Clear</button><button id="cf-no">Keep</button></div>
+
+<script>
+(() => {
+const KEY = 'floorplot-v1';
+const SNAP = 0.5;
+const COLORS = ['#c0874a','#4f8f6b','#6d7fc4','#b65f7a','#3e9aa6','#a08a2e','#8a62b0','#c56a3a'];
+
+function sample(){
+  return {
+    job:{customer:'Sample: Rivera residence', address:'1420 Mesa Verde Dr', tax:7.75, markup:0, no:'FP-'+String(Date.now()).slice(-5)},
+    baseboard:{price:1.85, labor:1.6},
+    products:[
+      {id:'p1',name:'White oak engineered 5″',kind:'box',coverage:20,price:118,waste:8,labor:4.5,color:COLORS[0]},
+      {id:'p2',name:'Coastal oak LVP 7×48',kind:'box',coverage:23.64,price:62,waste:10,labor:2.25,color:COLORS[1]},
+      {id:'p3',name:'Plush carpet 12′ roll',kind:'roll',rollWidth:12,price:27,pad:6,waste:5,labor:0.95,color:COLORS[2]},
+      {id:'p4',name:'Porcelain tile 12×24',kind:'box',coverage:15.5,price:48,waste:15,labor:6.5,color:COLORS[3]},
+    ],
+    rooms:[
+      {id:'r1',name:'Living room',pts:[[0,0],[20,0],[20,16],[8,16],[8,12],[0,12]],productId:'p1',base:true},
+      {id:'r2',name:'Kitchen',pts:[[20,0],[32,0],[32,14],[20,14]],productId:'p2',base:true},
+      {id:'r3',name:'Primary bedroom',pts:[[20,14],[32,14],[32,27],[20,27]],productId:'p3',base:true},
+      {id:'r4',name:'Bath',pts:[[12,16],[20,16],[20,24],[12,24]],productId:'p4',base:false},
+    ]
+  };
+}
+let S;
+try{ S = JSON.parse(localStorage.getItem(KEY)) }catch(e){}
+if(!S || !S.rooms) S = sample();
+function normalize(){ S.rooms.forEach(r=>{ if(!Array.isArray(r.measured)) r.measured=r.pts.map(()=>true); }); }
+normalize();
+const save = () => { try{ localStorage.setItem(KEY, JSON.stringify(S)) }catch(e){} };
+
+let mode='select', draft=[], hover=null, selected=null, selWall=null, lastWall=null, pointers=new Map(), bleDev=null, view={x:-3,y:-3,w:42,h:34}, drag=null;
+const $ = id => document.getElementById(id);
+const svg = $('canvas'), layer = $('layer');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid = p => p + Math.random().toString(36).slice(2,8);
+const money = n => '$' + n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const num = (n,d=1) => n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+function fmtLen(ft){ const inch=Math.round(ft*12); const f=Math.floor(inch/12), i=inch%12; return f+'′'+(i?' '+i+'″':''); }
+
+// ---- geometry
+function area(p){ let a=0; for(let i=0;i<p.length;i++){const [x1,y1]=p[i],[x2,y2]=p[(i+1)%p.length]; a+=x1*y2-x2*y1;} return a/2; }
+function perim(p){ let s=0; for(let i=0;i<p.length;i++){const [x1,y1]=p[i],[x2,y2]=p[(i+1)%p.length]; s+=Math.hypot(x2-x1,y2-y1);} return s; }
+function bbox(p){ const xs=p.map(q=>q[0]), ys=p.map(q=>q[1]); return {x:Math.min(...xs),y:Math.min(...ys),w:Math.max(...xs)-Math.min(...xs),h:Math.max(...ys)-Math.min(...ys)}; }
+function centroid(p){ const A=area(p); if(Math.abs(A)<1e-6){const b=bbox(p);return [b.x+b.w/2,b.y+b.h/2];} let cx=0,cy=0; for(let i=0;i<p.length;i++){const [x1,y1]=p[i],[x2,y2]=p[(i+1)%p.length]; const f=x1*y2-x2*y1; cx+=(x1+x2)*f; cy+=(y1+y2)*f;} return [cx/(6*A),cy/(6*A)]; }
+const snap = v => Math.round(v/SNAP)*SNAP;
+const r96 = v => Math.round(v*96)/96;
+function axisOf(p,i){ const a=p[i], b=p[(i+1)%p.length]; const dx=b[0]-a[0], dy=b[1]-a[1]; const L=Math.hypot(dx,dy); if(L<1e-9) return null;
+  if(Math.abs(dy)<1e-6) return {ax:'x',s:Math.sign(dx),L}; if(Math.abs(dx)<1e-6) return {ax:'y',s:Math.sign(dy),L}; return {ax:'d',ux:dx/L,uy:dy/L,L}; }
+function needsMeasure(r,i){ if(r.measured[i]) return false; const a=axisOf(r.pts,i); if(!a) return false; if(a.ax==='d') return true;
+  for(let j=0;j<r.pts.length;j++){ if(j===i||r.measured[j]) continue; const b=axisOf(r.pts,j); if(b&&b.ax===a.ax) return true; } return false; }
+function wallState(r,i){ return r.measured[i]?'done':needsMeasure(r,i)?'need':'auto'; }
+function nextNeeded(r,from){ const n=r.pts.length; for(let k=1;k<=n;k++){ const j=((from+k)%n+n)%n; if(needsMeasure(r,j)) return j; } return null; }
+function sideOf(r,i){ const a=axisOf(r.pts,i); if(!a||a.ax==='d') return 'angled'; const cw=area(r.pts)>0;
+  const m = a.ax==='x' ? (a.s>0?'top':'bottom') : (a.s>0?'right':'left'); if(cw) return m; return {top:'bottom',bottom:'top',left:'right',right:'left'}[m]; }
+// Set wall i to length L. Another wall on the same axis stretches to keep the room closed (an unmeasured one when possible).
+function setWall(r,i,L){
+  const p=r.pts, n=p.length, w=axisOf(p,i); if(!w) return 'That wall has no length.';
+  const delta=L-w.L;
+  if(Math.abs(delta)<1/192){ r.measured[i]=true; return true; }
+  if(w.ax==='d'){ const v=(i+1)%n; p[v]=[r96(p[v][0]+w.ux*delta), r96(p[v][1]+w.uy*delta)]; r.measured[i]=true; return true; }
+  const c=[];
+  for(let k=1;k<n;k++){ const j=(i+k)%n, a=axisOf(p,j); if(!a||a.ax!==w.ax) continue; const anti=a.s!==w.s; const nl=anti?a.L+delta:a.L-delta; if(nl<0.05) continue; c.push({k,score:(r.measured[j]?2:0)+(anti?0:1)+k*0.001}); }
+  if(!c.length) return `A ${fmtLen(L)} wall won't fit this shape. Check the reading, or drag the corners first.`;
+  c.sort((a,b)=>a.score-b.score); const k=c[0].k;
+  const dx=w.ax==='x'?w.s*delta:0, dy=w.ax==='y'?w.s*delta:0;
+  for(let m=1;m<=k;m++){ const v=(i+m)%n; p[v]=[r96(p[v][0]+dx), r96(p[v][1]+dy)]; }
+  r.measured[i]=true; return true; }
+function toWorld(e){ const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; const w=pt.matrixTransform(svg.getScreenCTM().inverse()); return [w.x,w.y]; }
+
+// ---- estimating
+const prod = id => S.products.find(p=>p.id===id);
+function estimate(room){
+  const p = prod(room.productId); const A = Math.abs(area(room.pts)), P = perim(room.pts);
+  const r = {area:A, perim:P, p};
+  if(!p) return r;
+  const w = 1 + p.waste/100;
+  if(p.kind==='roll'){
+    const b = bbox(room.pts); const run=Math.max(b.w,b.h), across=Math.min(b.w,b.h);
+    const drops = Math.ceil(across/p.rollWidth - 1e-9);
+    const lf = drops*run*w;
+    r.qty = Math.ceil(lf*p.rollWidth/9*10)/10; r.unit='sy';
+    r.detail = `${drops} drop${drops>1?'s':''} × ${fmtLen(run)} · ${num(lf,1)} lf off roll`;
+    r.mat = r.qty*(p.price+(p.pad||0));
+  } else {
+    r.qty = Math.ceil(A*w/p.coverage - 1e-9); r.unit='box';
+    r.detail = `${num(r.qty*p.coverage,1)} sq ft delivered`;
+    r.mat = r.qty*p.price;
+  }
+  r.lab = A*p.labor;
+  return r;
+}
+function quote(){
+  const by = new Map(); let baseLf=0;
+  for(const room of S.rooms){
+    const e = estimate(room);
+    if(room.base) baseLf += e.perim;
+    if(!e.p) continue;
+    const g = by.get(e.p.id) || {p:e.p, area:0, qty:0, mat:0, lab:0, rooms:[]};
+    g.area+=e.area; g.qty+=e.qty; g.mat+=e.mat; g.lab+=e.lab; g.rooms.push(room.name); by.set(e.p.id,g);
+  }
+  const lines=[...by.values()];
+  const bbPieces = Math.ceil(baseLf*1.1/8);
+  const bb = {lf:baseLf, pieces:bbPieces, mat:bbPieces*8*S.baseboard.price, lab:baseLf*S.baseboard.labor};
+  let mat=lines.reduce((s,l)=>s+l.mat,0)+bb.mat, lab=lines.reduce((s,l)=>s+l.lab,0)+bb.lab;
+  const mk = 1+(+S.job.markup||0)/100;
+  mat*=mk; lab*=mk;
+  const tax = mat*(+S.job.tax||0)/100;
+  return {lines, bb, mat, lab, tax, total:mat+lab+tax, mk};
+}
+
+// ---- canvas render
+function render(){
+  svg.setAttribute('viewBox',`${view.x} ${view.y} ${view.w} ${view.h}`);
+  const g=$('gridbg'); const pad=200; g.setAttribute('x',Math.floor(view.x/5)*5-pad); g.setAttribute('y',Math.floor(view.y/5)*5-pad); g.setAttribute('width',view.w+pad*2); g.setAttribute('height',view.h+pad*2);
+  const fs = view.w/(svg.clientWidth||700)*14;
+  let h='';
+  for(const r of S.rooms){
+    const p=prod(r.productId); const c=p?p.color:'#888'; const sel=r.id===selected;
+    const d=r.pts.map(q=>q.join(',')).join(' ');
+    h+=`<polygon data-room="${r.id}" points="${d}" fill="${c}" fill-opacity="${sel?0.42:0.26}" stroke="${sel?'var(--sel)':'var(--ink)'}" stroke-width="${sel?0.14:0.09}" stroke-linejoin="round" style="cursor:${mode==='select'?'move':'crosshair'}"/>`;
+  }
+  for(const r of S.rooms){
+    const sgn = area(r.pts)>0?1:-1;
+    for(let i=0;i<r.pts.length;i++){
+      const [x1,y1]=r.pts[i],[x2,y2]=r.pts[(i+1)%r.pts.length]; const L=Math.hypot(x2-x1,y2-y1); if(L<1.5) continue;
+      const nx=(y2-y1)/L*sgn*-1, ny=-(x2-x1)/L*sgn*-1; const off=fs*0.9;
+      const mx=(x1+x2)/2 - nx*off, my=(y1+y2)/2 - ny*off;
+      let ang=Math.atan2(y2-y1,x2-x1)*180/Math.PI; if(ang>90||ang<-90) ang+=180;
+      const isSel=r.id===selected&&i===selWall&&mode==='select'; const st=r.measured[i]?'var(--ink)':'var(--muted)';
+      h+=`<text x="${mx}" y="${my}" transform="rotate(${ang} ${mx} ${my})" text-anchor="middle" dominant-baseline="middle" font-family="JetBrains Mono,monospace" font-size="${fs*(isSel?0.95:0.8)}" font-weight="${isSel?600:400}" fill="${isSel?'var(--accent)':st}" pointer-events="none" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.12}">${fmtLen(L)}</text>`;
+    }
+    const [cx,cy]=centroid(r.pts); const e=estimate(r);
+    h+=`<text x="${cx}" y="${cy-fs*0.35}" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="700" font-size="${fs*1.15}" fill="var(--ink)" pointer-events="none" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.18}">${esc(r.name)}</text>`;
+    h+=`<text x="${cx}" y="${cy+fs*0.9}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="${fs*0.8}" fill="var(--ink)" pointer-events="none" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.15}">${num(e.area,1)} sq ft</text>`;
+  }
+  if(mode==='select') for(const r of S.rooms) r.pts.forEach((a,i)=>{ const b=r.pts[(i+1)%r.pts.length]; const isSel=r.id===selected&&i===selWall;
+    if(isSel) h+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="var(--accent)" stroke-width="${fs*0.28}" stroke-linecap="round" pointer-events="none"/>`;
+    h+=`<line data-room="${r.id}" data-wall="${i}" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="transparent" stroke-width="${fs*1.9}" stroke-linecap="round" pointer-events="stroke" style="cursor:pointer"/>`; });
+  const sr=S.rooms.find(r=>r.id===selected);
+  if(sr && mode==='select') sr.pts.forEach((q,i)=>{ h+=`<circle data-vi="${i}" cx="${q[0]}" cy="${q[1]}" r="${fs*0.42}" fill="var(--sheet)" stroke="var(--sel)" stroke-width="${fs*0.12}" style="cursor:grab"/>`; });
+  if(mode==='draw'){
+    const pts = hover? [...draft,hover] : draft;
+    if(pts.length) h+=`<polyline points="${pts.map(q=>q.join(',')).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="0.12" stroke-dasharray="0.4 0.25"/>`;
+    for(let i=1;i<pts.length;i++){ const [x1,y1]=pts[i-1],[x2,y2]=pts[i]; const L=Math.hypot(x2-x1,y2-y1); if(L<0.5) continue;
+      h+=`<text x="${(x1+x2)/2}" y="${(y1+y2)/2-fs*0.5}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="${fs*0.85}" fill="var(--accent)" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.15}" pointer-events="none">${fmtLen(L)}</text>`; }
+    draft.forEach((q,i)=>{ h+=`<circle cx="${q[0]}" cy="${q[1]}" r="${fs*(i===0&&draft.length>=3?0.5:0.3)}" fill="${i===0?'var(--accent)':'var(--sheet)'}" stroke="var(--accent)" stroke-width="${fs*0.1}" pointer-events="none"/>`; });
+    if(hover) h+=`<circle cx="${hover[0]}" cy="${hover[1]}" r="${fs*0.22}" fill="var(--accent)" pointer-events="none"/>`;
+  }
+  layer.innerHTML=h;
+  const q=quote(); const tot=S.rooms.reduce((s,r)=>s+Math.abs(area(r.pts)),0);
+  $('statbar').innerHTML=`<span>Rooms <b>${S.rooms.length}</b></span><span>Floor area <b>${num(tot,1)} sq ft</b></span><span>Baseboard <b>${num(q.bb.lf,1)} lf</b></span><span>Est. total <b>${money(q.total)}</b></span>`;
+}
+
+// ---- side panels
+function renderRooms(){
+  $('room-count').textContent = S.rooms.length ? S.rooms.length+' total' : '';
+  if(!S.rooms.length){ $('rooms').innerHTML='<p class="empty">No rooms yet. Tap <b>Draw room</b> and click corners on the grid, or add a quick rectangle above.</p>'; return; }
+  const opts = productOptions;
+  $('rooms').innerHTML = S.rooms.map(r=>{ const e=estimate(r); const c=e.p?e.p.color:'#888';
+    return `<div class="room${r.id===selected?' sel':''}" style="--c:${c}" data-id="${r.id}">
+      <div class="top"><input id="rn-${r.id}" data-f="name" value="${esc(r.name)}" aria-label="Room name"><button class="btn ghost danger" data-del="${r.id}" aria-label="Delete ${esc(r.name)}">✕</button></div>
+      <select id="rp-${r.id}" data-f="productId" aria-label="Flooring">${opts(r.productId)}</select>
+      <div class="meta"><span><b>${num(e.area,1)}</b> sq ft · <b>${num(e.perim,1)}</b> lf</span><span>${e.p?`<b>${e.unit==='sy'?num(e.qty,1):e.qty}</b> ${e.unit==='sy'?'sq yd':(e.qty===1?'box':'boxes')}`:''}</span></div>
+      ${e.p?`<div class="meta"><span>${e.detail}</span></div>`:''}
+      <label class="check"><input type="checkbox" id="rb-${r.id}" data-f="base"${r.base?' checked':''}> Baseboard</label>
+    </div>`; }).join('');
+}
+function productOptions(id){ return '<option value="">— No flooring —</option>'+S.products.map(p=>`<option value="${p.id}"${p.id===id?' selected':''}>${esc(p.name)}</option>`).join(''); }
+const selRoom = () => S.rooms.find(r=>r.id===selected);
+function renderEdit(msg,cls){
+  const eb=$('editbar'); const r=selRoom();
+  if(mode==='draw'){ eb.innerHTML='<div class="eb-msg">Tap each corner on the grid. Tap the first corner again to close the room.</div>'; return; }
+  if(!r){ eb.innerHTML=`<div class="eb-msg ${cls||''}">${msg?esc(msg):S.rooms.length?'Tap a room to measure its walls, or add another room.':'Start with <b>+ Rectangle</b> or <b>+ L-shape</b>, then shoot each wall with your D2.'}</div>`; return; }
+  const n=r.pts.length; if(selWall==null||selWall>=n) selWall=nextNeeded(r,-1)??0;
+  const chips=r.pts.map((_,i)=>{ const a=axisOf(r.pts,i), st=wallState(r,i); return `<button class="chip ${st}${i===selWall?' on':''}" data-chip="${i}" id="chip-${i}" title="${st==='done'?'Measured':st==='need'?'Needs measuring':'Set by the other walls'}">${st==='done'?'✓ ':''}${i+1} · ${fmtLen(a?a.L:0)}</button>`; }).join('');
+  const a=axisOf(r.pts,selWall), st=wallState(r,selWall), L=a?a.L:0;
+  const stTxt= st==='done'?'measured':st==='need'?'needs measuring':'set by the other walls';
+  const complete=nextNeeded(r,-1)==null;
+  if(!msg){ msg= complete?`All walls measured · ${num(Math.abs(area(r.pts)),1)} sq ft`:`Shoot the ${sideOf(r,selWall)} wall with the D2, or type its length and tap Set.`; cls=complete?'ok':''; }
+  const metric=$('m-unit').value==='m'; const ft=Math.floor(L+1e-9), inch=Math.round((L-ft)*12*8)/8;
+  eb.innerHTML=`<div class="eb-row"><input id="eb-name" value="${esc(r.name)}" aria-label="Room name"><select id="eb-prod" aria-label="Flooring">${productOptions(r.productId)}</select><button class="btn ghost danger" id="eb-del" aria-label="Delete room" title="Delete room">✕</button></div>
+    <div class="chips" role="group" aria-label="Walls">${chips}</div>
+    <div class="eb-row"><span class="eb-label">Wall ${selWall+1} of ${n} · ${sideOf(r,selWall)} <span>${stTxt}</span></span>
+      ${metric?`<div class="lenbox"><input id="eb-ft" inputmode="decimal" autocomplete="off" placeholder="${num(L/3.28084,3)}" aria-label="Length in meters"><span>m</span></div>`
+      :`<div class="lenbox"><input id="eb-ft" inputmode="decimal" autocomplete="off" placeholder="${ft}" aria-label="Feet"><span>ft</span></div><div class="lenbox"><input id="eb-in" inputmode="decimal" autocomplete="off" placeholder="${inch}" aria-label="Inches"><span>in</span></div>`}
+      <button class="btn primary big" id="eb-set">Set</button>${lastWall&&lastWall.id===r.id?'<button class="btn ghost big" id="eb-undo">Undo</button>':''}</div>
+    <div class="eb-msg ${cls||''}">${esc(msg)}</div>`;
+}
+function selectRoom(id,wall){ selected=id; const r=selRoom(); selWall = r ? (wall!=null?wall:(nextNeeded(r,-1)??0)) : null; render(); renderRooms(); renderEdit(); }
+function applyWall(L){
+  const r=selRoom(); if(!r) return; const i=selWall;
+  const snap0={id:r.id,pts:r.pts.map(q=>[...q]),measured:[...r.measured],wall:i};
+  const res=setWall(r,i,L); if(res!==true){ renderEdit(res,'err'); return; }
+  lastWall=snap0; save(); const nx=nextNeeded(r,i); let msg, cls='';
+  if(nx==null){ msg=`${r.name} is done · ${num(Math.abs(area(r.pts)),1)} sq ft. Pick its flooring above, then add the next room.`; cls='ok'; }
+  else { selWall=nx; msg=`Wall ${i+1} set to ${fmtLen(L)}. Next: the ${sideOf(r,nx)} wall.`; }
+  render(); renderRooms(); renderEdit(msg,cls);
+  const eb=$('editbar'); eb.classList.add('flash'); setTimeout(()=>eb.classList.remove('flash'),350); }
+function readEditLen(){ const f=$('eb-ft'), i=$('eb-in'); const u=$('m-unit').value; const fv=f.value.trim(), iv=i?i.value.trim():'';
+  if(!fv&&!iv) return NaN; let L = fv? parseLen(fv,u) : 0; if(iv){ const x=parseFloat(iv.replace(',','.')); if(isNaN(x)) return NaN; L+=x/12; } return L; }
+function addTemplate(kind){
+  if(mode==='draw') setMode('select');
+  const all=S.rooms.flatMap(r=>r.pts); const x0=all.length?snap(Math.max(...all.map(p=>p[0]))+2):0, y0=all.length?snap(Math.min(...all.map(p=>p[1]))):0;
+  const shape= kind==='L'? [[0,0],[16,0],[16,8],[10,8],[10,14],[0,14]] : [[0,0],[12,0],[12,10],[0,10]];
+  const id=uid('r'); S.rooms.push({id,name:'Room '+(S.rooms.length+1),pts:shape.map(([x,y])=>[x0+x,y0+y]),productId:S.products[0]?.id||'',base:true,measured:shape.map(()=>false)});
+  lastWall=null; save(); selectRoom(id,0); fit(); }
+function renderProducts(){
+  $('bb-price').value=S.baseboard.price; $('bb-labor').value=S.baseboard.labor;
+  $('products').innerHTML = S.products.map(p=>{ const used=S.rooms.filter(r=>r.productId===p.id).length;
+    const f=(k,l,step)=>`<label>${l}<input type="number" step="${step}" min="0" id="pf-${p.id}-${k}" data-pid="${p.id}" data-k="${k}" value="${p[k]??0}"></label>`;
+    return `<div class="panel prod" style="--c:${p.color}">
+      <div class="row" style="justify-content:space-between;align-items:center"><span class="kind">${p.kind==='roll'?'Roll good · priced per sq yd':'Boxed good · priced per box'}</span><span class="kind">${used} room${used===1?'':'s'}</span></div>
+      <label>Product name<input id="pf-${p.id}-name" data-pid="${p.id}" data-k="name" value="${esc(p.name)}"></label>
+      <div class="row">${p.kind==='roll'? f('rollWidth','Roll width (ft)',0.5)+f('price','Material $/sy',0.25)+f('pad','Pad $/sy',0.25) : f('coverage','Sq ft per box',0.01)+f('price','$ per box',0.5)}</div>
+      <div class="row">${f('waste','Waste %',1)}${f('labor','Labor $/sq ft',0.05)}<label style="flex:0 0 52px">Color<input type="color" id="pf-${p.id}-color" data-pid="${p.id}" data-k="color" value="${p.color}" style="padding:2px;height:34px"></label></div>
+      <button class="btn ghost danger" data-pdel="${p.id}" ${used?'disabled title="Unassign it from rooms first"':''}>${used?'In use':'Remove product'}</button>
+    </div>`; }).join('');
+}
+function renderQuote(){
+  const q=quote(); const j=S.job;
+  $('j-customer').value=j.customer; $('j-address').value=j.address; $('j-tax').value=j.tax; $('j-markup').value=j.markup;
+  $('q-title').textContent = j.customer ? 'Estimate for '+j.customer : 'Flooring estimate';
+  $('q-no').textContent = j.no + (j.address?' · '+j.address:'');
+  let h = q.lines.map(l=>{ const p=l.p; const unit=p.kind==='roll'?'sq yd':'box';
+    const sub = p.kind==='roll'? `${money(p.price)}/sy + ${money(p.pad||0)} pad · ${num(l.area,1)} sq ft` : `${money(p.price)}/box · ${num(l.area,1)} sq ft at ${p.waste}% waste`;
+    return `<tr><td><span class="sw" style="--c:${p.color}"></span>${esc(p.name)}<span class="sub">${esc(l.rooms.join(', '))} · ${sub}</span></td><td class="n">${p.kind==='roll'?num(l.qty,1):l.qty}</td><td class="n">${unit}</td><td class="n">${money(l.mat*q.mk)}</td><td class="n">${money(l.lab*q.mk)}</td><td class="n">${money((l.mat+l.lab)*q.mk)}</td></tr>`; }).join('');
+  if(q.bb.lf>0) h+=`<tr><td>Baseboard &amp; install<span class="sub">${num(q.bb.lf,1)} lf measured · ${q.bb.pieces} × 8′ pieces at 10% waste</span></td><td class="n">${q.bb.pieces}</td><td class="n">8′ pc</td><td class="n">${money(q.bb.mat*q.mk)}</td><td class="n">${money(q.bb.lab*q.mk)}</td><td class="n">${money((q.bb.mat+q.bb.lab)*q.mk)}</td></tr>`;
+  if(!h) h='<tr><td colspan="6" class="empty">Assign flooring to rooms on the Plan tab to build line items.</td></tr>';
+  $('q-body').innerHTML=h;
+  $('q-totals').innerHTML=`<div><span>Materials</span><span>${money(q.mat)}</span></div><div><span>Labor</span><span>${money(q.lab)}</span></div><div><span>Tax (${+j.tax||0}%)</span><span>${money(q.tax)}</span></div><div class="grand"><span>Total</span><span>${money(q.total)}</span></div>`;
+}
+function all(){ render(); renderRooms(); renderEdit(); }
+
+// ---- interactions
+function setMode(m){ mode=m; draft=[]; hover=null; $('mode-select').setAttribute('aria-pressed',m==='select'); $('mode-draw').setAttribute('aria-pressed',m==='draw');
+  ['undo-pt','finish','cancel'].forEach(id=>$(id).hidden=m!=='draw'); svg.classList.toggle('drawing',m==='draw');
+  ['add-rect','add-l','mode-draw'].forEach(id=>$(id).hidden=m==='draw');
+  $('hint').textContent = m==='draw' ? 'Tap corners · tap first point to close' : 'Tap a wall to measure it'; render(); renderEdit(); }
+function finishDraft(){ if(draft.length<3) return; const id=uid('r'); S.rooms.push({id,name:'Room '+(S.rooms.length+1),pts:draft,productId:S.products[0]?.id||'',base:true,measured:draft.map(()=>false)}); save(); setMode('select'); selectRoom(id,0); }
+$('add-rect').onclick=()=>addTemplate('rect'); $('add-l').onclick=()=>addTemplate('L');
+$('mode-select').onclick=()=>setMode('select'); $('mode-draw').onclick=()=>{selected=null;setMode('draw');renderRooms();};
+$('undo-pt').onclick=()=>{draft.pop(); walkLog.pop(); heading=(heading+3)%4; headLabel(); showLog(); render();}; $('cancel').onclick=()=>setMode('select'); $('finish').onclick=finishDraft;
+
+function pinchStart(){ const [a,b]=[...pointers.values()]; const mx=(a[0]+b[0])/2, my=(a[1]+b[1])/2;
+  if(drag&&drag.type==='room'){ const r=selRoom(); if(r) r.pts=drag.orig; }
+  drag={type:'pinch',d0:Math.hypot(a[0]-b[0],a[1]-b[1])||1,mid:toWorld({clientX:mx,clientY:my}),v:{...view}}; }
+svg.addEventListener('pointerdown',e=>{
+  pointers.set(e.pointerId,[e.clientX,e.clientY]);
+  if(pointers.size===2 && mode==='select'){ pinchStart(); return; }
+  if(pointers.size>2) return;
+  const w=toWorld(e);
+  if(mode==='draw'){ const pt=[snap(w[0]),snap(w[1])];
+    if(draft.length>=3 && Math.hypot(pt[0]-draft[0][0],pt[1]-draft[0][1])<0.6){ finishDraft(); return; }
+    const last=draft[draft.length-1]; if(!last||last[0]!==pt[0]||last[1]!==pt[1]) draft.push(pt); render(); return; }
+  svg.setPointerCapture(e.pointerId);
+  const t=e.target, vi=t.dataset.vi, rid=t.dataset.room, wi=t.dataset.wall;
+  if(vi!==undefined){ drag={type:'vertex',i:+vi}; }
+  else if(rid && wi!==undefined){ selectRoom(rid,+wi); drag={type:'none'}; return; }
+  else if(rid){ const r=S.rooms.find(x=>x.id===rid); if(selected!==rid) selectRoom(rid); drag={type:'room',start:w,orig:r.pts.map(q=>[...q]),moved:false}; }
+  else { drag={type:'pan',sx:e.clientX,sy:e.clientY,v:{...view},scale:svg.getScreenCTM().a,moved:false}; }
+  render();
+});
+svg.addEventListener('pointermove',e=>{
+  if(pointers.has(e.pointerId)) pointers.set(e.pointerId,[e.clientX,e.clientY]);
+  if(drag&&drag.type==='pinch'){ if(pointers.size<2) return; const [a,b]=[...pointers.values()]; const d=Math.hypot(a[0]-b[0],a[1]-b[1])||1;
+    const nw=Math.min(300,Math.max(6,drag.v.w*drag.d0/d)); const k=nw/drag.v.w, m=drag.mid; view={x:m[0]-(m[0]-drag.v.x)*k,y:m[1]-(m[1]-drag.v.y)*k,w:nw,h:drag.v.h*k}; render(); return; }
+  if(mode==='draw'){ const w=toWorld(e); hover=[snap(w[0]),snap(w[1])]; render(); return; }
+  if(!drag||drag.type==='none') return;
+  if(drag.type==='pan'){ const dx=(e.clientX-drag.sx)/drag.scale, dy=(e.clientY-drag.sy)/drag.scale; if(Math.abs(dx)+Math.abs(dy)>0.2) drag.moved=true; view.x=drag.v.x-dx; view.y=drag.v.y-dy; render(); return; }
+  const w=toWorld(e); const r=S.rooms.find(x=>x.id===selected); if(!r) return;
+  if(drag.type==='vertex'){ r.pts[drag.i]=[snap(w[0]),snap(w[1])]; }
+  else { const dx=snap(w[0]-drag.start[0]), dy=snap(w[1]-drag.start[1]); if(dx||dy) drag.moved=true; r.pts=drag.orig.map(q=>[q[0]+dx,q[1]+dy]); }
+  render();
+});
+function pointerEnd(e){ pointers.delete(e.pointerId); if(!drag) return;
+  if(drag.type==='pinch'){ if(pointers.size===0) drag=null; return; }
+  if(drag.type==='pan' && !drag.moved && selected){ selected=null; selWall=null; renderRooms(); render(); renderEdit(); }
+  if(drag.type==='vertex'||drag.type==='room'){ save(); renderRooms(); if(drag.type==='vertex') renderEdit(); }
+  drag=null; }
+svg.addEventListener('pointerup',pointerEnd); svg.addEventListener('pointercancel',pointerEnd);
+svg.addEventListener('pointerleave',()=>{ if(mode==='draw'){hover=null;render();} });
+function zoom(f,cx,cy){ cx??=view.x+view.w/2; cy??=view.y+view.h/2; const nw=Math.min(300,Math.max(6,view.w*f)); const k=nw/view.w; view={x:cx-(cx-view.x)*k,y:cy-(cy-view.y)*k,w:nw,h:view.h*k}; render(); }
+svg.addEventListener('wheel',e=>{ e.preventDefault(); const w=toWorld(e); zoom(e.deltaY>0?1.12:1/1.12,w[0],w[1]); },{passive:false});
+$('zin').onclick=()=>zoom(1/1.25); $('zout').onclick=()=>zoom(1.25);
+function fit(){ const pts=S.rooms.flatMap(r=>r.pts).concat(draft); if(!pts.length){view={x:-3,y:-3,w:42,h:34};render();return;} const b=bbox(pts); const r=svg.clientWidth/Math.max(1,svg.clientHeight)||1.3;
+  const m=Math.max(4,Math.max(b.w,b.h)*0.18); let w=b.w+m*2, h=b.h+m*2; if(w/h<r) w=h*r; else h=w/r; view={x:b.x+b.w/2-w/2,y:b.y+b.h/2-h/2,w,h}; render(); }
+$('fit').onclick=fit;
+document.addEventListener('keydown',e=>{ if(e.target.matches('input,select,textarea')) return;
+  if(e.key==='Escape'&&mode==='draw') setMode('select');
+  if(e.key==='Enter'&&mode==='draw') finishDraft();
+  if((e.key==='Delete'||e.key==='Backspace')&&selected&&mode==='select'){ e.preventDefault(); delRoom(selected); } });
+
+
+let lastDel=null, tTimer;
+function delRoom(id){ const i=S.rooms.findIndex(r=>r.id===id); if(i<0) return; lastDel={room:S.rooms[i],i}; S.rooms.splice(i,1); if(selected===id){ selected=null; selWall=null; } lastWall=null; save(); all();
+  $('toast-msg').textContent=`Deleted ${lastDel.room.name}`; $('toast').hidden=false; clearTimeout(tTimer); tTimer=setTimeout(()=>$('toast').hidden=true,5000); }
+$('toast-undo').onclick=()=>{ if(lastDel){ S.rooms.splice(lastDel.i,0,lastDel.room); const id=lastDel.room.id; lastDel=null; save(); selectRoom(id); } $('toast').hidden=true; };
+
+$('rooms').addEventListener('input',e=>{ const card=e.target.closest('.room'); if(!card) return; const r=S.rooms.find(x=>x.id===card.dataset.id); const f=e.target.dataset.f; if(!f) return;
+  r[f] = e.target.type==='checkbox'? e.target.checked : e.target.value; save(); render(); if(f!=='name') renderRooms(); if(r.id===selected) renderEdit(); });
+$('rooms').addEventListener('click',e=>{ const d=e.target.closest('[data-del]'); if(d){ delRoom(d.dataset.del); return; }
+  const card=e.target.closest('.room'); if(card && card.dataset.id!==selected && !e.target.matches('input,select')) selectRoom(card.dataset.id); });
+$('rooms').addEventListener('focusin',e=>{ const card=e.target.closest('.room'); if(card&&card.dataset.id!==selected){ selected=card.dataset.id; selWall=null; render(); renderEdit(); document.querySelectorAll('.room').forEach(c=>c.classList.toggle('sel',c.dataset.id===selected)); } });
+
+const eb=$('editbar');
+eb.addEventListener('click',e=>{ const r=selRoom(); if(!r) return; const c=e.target.closest('[data-chip]');
+  if(c){ selWall=+c.dataset.chip; render(); renderEdit(); return; }
+  if(e.target.id==='eb-set'){ const L=readEditLen(); if(!(L>0)){ renderEdit('Type a length first, like 12 ft 6 in.','err'); return; } applyWall(L); return; }
+  if(e.target.id==='eb-undo'&&lastWall){ const u=lastWall; const rr=S.rooms.find(x=>x.id===u.id); if(rr){ rr.pts=u.pts; rr.measured=u.measured; selWall=u.wall; } lastWall=null; save(); render(); renderRooms(); renderEdit('Undone.'); return; }
+  if(e.target.id==='eb-del') delRoom(r.id); });
+eb.addEventListener('input',e=>{ const r=selRoom(); if(!r) return; if(e.target.id==='eb-name'){ r.name=e.target.value; save(); render(); const li=$('rn-'+r.id); if(li) li.value=r.name; } });
+eb.addEventListener('change',e=>{ const r=selRoom(); if(!r) return; if(e.target.id==='eb-prod'){ r.productId=e.target.value; save(); render(); renderRooms(); } });
+eb.addEventListener('keydown',e=>{ if(e.key!=='Enter') return;
+  if(e.target.id==='eb-ft'&&$('eb-in')&&!$('eb-in').value&&!/['′"″a-z]/i.test(e.target.value)){ e.preventDefault(); $('eb-in').focus(); return; }
+  if(e.target.id==='eb-ft'||e.target.id==='eb-in'){ e.preventDefault(); $('eb-set').click(); } });
+$('m-unit').addEventListener('change',()=>renderEdit());
+$('new-job').onclick=()=>{ $('confirm').hidden=false; };
+$('cf-no').onclick=()=>{ $('confirm').hidden=true; };
+$('cf-yes').onclick=()=>{ $('confirm').hidden=true; S.rooms=[]; S.job={customer:'',address:'',tax:S.job.tax,markup:S.job.markup,no:'FP-'+String(Date.now()).slice(-5)};
+  selected=null; selWall=null; lastWall=null; draft=[]; save(); document.getElementById('tab-plan').click(); };
+$('products').addEventListener('input',e=>{ const t=e.target; if(!t.dataset.pid) return; const p=prod(t.dataset.pid); const k=t.dataset.k;
+  p[k] = (k==='name'||k==='color')? t.value : (+t.value||0); save(); if(k==='color') t.closest('.prod').style.setProperty('--c',t.value); });
+$('products').addEventListener('click',e=>{ const b=e.target.closest('[data-pdel]'); if(!b||b.disabled) return; S.products=S.products.filter(p=>p.id!==b.dataset.pdel); save(); renderProducts(); });
+function addProduct(kind){ const color=COLORS[S.products.length%COLORS.length];
+  S.products.push(kind==='roll'? {id:uid('p'),name:'New carpet',kind,rollWidth:12,price:22,pad:5,waste:5,labor:0.9,color} : {id:uid('p'),name:'New boxed product',kind,coverage:20,price:55,waste:10,labor:3,color}); save(); renderProducts(); }
+$('add-roll').onclick=()=>addProduct('roll'); $('add-box').onclick=()=>addProduct('box');
+$('bb-price').oninput=e=>{S.baseboard.price=+e.target.value||0;save();}; $('bb-labor').oninput=e=>{S.baseboard.labor=+e.target.value||0;save();};
+
+[['j-customer','customer'],['j-address','address'],['j-tax','tax'],['j-markup','markup']].forEach(([id,k])=>{ $(id).addEventListener('input',e=>{ S.job[k]=e.target.type==='number'?(+e.target.value||0):e.target.value; save();
+  const a=document.activeElement; renderQuote(); a&&a.focus(); }); });
+$('reset').onclick=()=>{ S=sample(); normalize(); selected=null; selWall=null; lastWall=null; save(); renderQuote(); all(); };
+$('copy-quote').onclick=async e=>{ const q=quote(); const j=S.job;
+  let t=`${j.customer?'Estimate for '+j.customer:'Flooring estimate'} (${j.no})\n${j.address}\n\n`;
+  q.lines.forEach(l=>{ t+=`${l.p.name} — ${l.p.kind==='roll'?num(l.qty,1)+' sq yd':l.qty+' boxes'} (${l.rooms.join(', ')}): ${money((l.mat+l.lab)*q.mk)}\n`; });
+  if(q.bb.lf>0) t+=`Baseboard — ${q.bb.pieces} × 8′ pieces installed: ${money((q.bb.mat+q.bb.lab)*q.mk)}\n`;
+  t+=`\nMaterials ${money(q.mat)}\nLabor ${money(q.lab)}\nTax ${money(q.tax)}\nTOTAL ${money(q.total)}\n`;
+  const b=e.currentTarget; try{ await navigator.clipboard.writeText(t); b.textContent='Copied'; }catch(err){ b.textContent='Copy blocked here'; } setTimeout(()=>b.textContent='Copy quote as text',1800); };
+
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{ const v=b.dataset.view;
+  document.querySelectorAll('nav button').forEach(x=>x.setAttribute('aria-selected',x===b));
+  document.querySelectorAll('.view').forEach(s=>s.hidden=s.id!=='view-'+v);
+  if(v==='products') renderProducts(); if(v==='quote') renderQuote(); if(v==='plan'){ all(); requestAnimationFrame(fit); } });
+
+// ---- laser walk entry
+const DIRS=[[1,0,'east →'],[0,1,'south ↓'],[-1,0,'west ←'],[0,-1,'north ↑']];
+let heading=0, walkLog=[];
+function parseLen(s,unit){ s=String(s).trim().toLowerCase().replace(/,/g,'.'); if(!s) return NaN; let m;
+  if(m=s.match(/^([\d.]+)\s*mm$/)) return +m[1]/304.8;
+  if(m=s.match(/^([\d.]+)\s*cm$/)) return +m[1]/30.48;
+  if(m=s.match(/^([\d.]+)\s*m$/)) return +m[1]*3.28084;
+  if(m=s.match(/^(\d+)\s*(?:'|′|ft)\s*-?\s*(\d+(?:\.\d+)?)?\s*(?:(\d+)\s*\/\s*(\d+))?\s*(?:"|″|in)?$/)) return +m[1]+((+m[2]||0)+(m[3]?m[3]/m[4]:0))/12;
+  if(m=s.match(/^(\d+(?:\.\d+)?)\s*(?:(\d+)\s*\/\s*(\d+))?\s*(?:"|″|in)$/)) return (+m[1]+(m[2]?m[2]/m[3]:0))/12;
+  if(m=s.match(/^([\d.]+)$/)){ const v=+m[1]; return unit==='m'?v*3.28084:unit==='in'?v/12:v; }
+  return NaN; }
+function headLabel(){ $('m-head').textContent='Next wall '+DIRS[heading][2]; }
+function showLog(msg){ $('m-log').innerHTML = walkLog.map((t,i)=>`<span>Wall ${i+1}: ${t}</span>`).join('') + (msg?`<span style="color:var(--accent)">${esc(msg)}</span>`:''); }
+function takeReading(feet){ const inp=$('m-in'); const L= feet>0 ? feet : parseLen(inp.value,$('m-unit').value);
+  if(!(L>0)){ showLog(`Couldn't read "${inp.value}". Try 12' 6" or 3.81 m.`); inp.select(); return; }
+  if(mode!=='draw'){ selected=null; setMode('draw'); renderRooms(); }
+  if(!draft.length){ const pts=S.rooms.flatMap(r=>r.pts); draft.push([pts.length?snap(Math.max(...pts.map(p=>p[0]))+3):0,0]); heading=0; walkLog=[]; }
+  const [x,y]=draft[draft.length-1], d=DIRS[heading], r8=v=>Math.round(v*96)/96;
+  const np=[r8(x+d[0]*L), r8(y+d[1]*L)]; draft.push(np);
+  walkLog.push(`${fmtLen(L)} ${DIRS[heading][2]}`); heading=(heading+1)%4; inp.value='';
+  if(draft.length>=4 && Math.hypot(np[0]-draft[0][0],np[1]-draft[0][1])<0.25){ draft.pop(); const n=walkLog.length; finishDraft(); const rr=selRoom(); if(rr) rr.measured=rr.pts.map(()=>true); save(); selected=null; selWall=null; heading=0; walkLog=[]; all(); renderEdit(`Room closed after ${n} walls. Tap it to name it and pick flooring, or keep shooting the next room.`,'ok'); showLog(`Room closed after ${n} walls.`); }
+  else showLog();
+  headLabel(); fit(); if(!(feet>0)) inp.focus(); }
+$('m-in').addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key==='Tab'){ e.preventDefault(); takeReading(); } });
+document.querySelectorAll('[data-turn]').forEach(b=>b.onclick=()=>{ heading=(heading+ +b.dataset.turn+4)%4; headLabel(); $('m-in').focus(); });
+
+// ---- DISTO D2 over Bluetooth LE: native app (@capacitor-community/bluetooth-le) or browsers with Web Bluetooth
+// The D2 sends each reading as a notification: a 4-byte little-endian float, in meters.
+const D2_MEAS = '3ab10101-f831-4395-b29d-570977d5bf94';
+const D2_SERVICE_GUESS = '3ab10100-f831-4395-b29d-570977d5bf94';
+const Cap = window.Capacitor;
+const BLE = Cap && Cap.isNativePlatform && Cap.isNativePlatform() && Cap.registerPlugin ? Cap.registerPlugin('BluetoothLe') : null;
+const policy = document.permissionsPolicy || document.featurePolicy;
+const WEBBLE = !BLE && !!navigator.bluetooth && !!(!policy || !policy.allowsFeature || policy.allowsFeature('bluetooth'));
+let bleSubs=[], lastBleAt=0;
+function bleStatus(t,ok){ const el=$('ble-state'); el.textContent=t; el.classList.toggle('on',!!ok); }
+function laserReading(feet){ if(mode==='select' && selRoom()){ applyWall(feet); } else takeReading(feet); }
+function onMeters(m){ const now=Date.now(); if(!(m>0) || now-lastBleAt<300) return; lastBleAt=now; laserReading(m*3.28084); }
+const connectedMsg = () => selRoom() ? 'D2 connected. Press its measure button to fill the highlighted wall.' : 'D2 connected. Add a room, or with no room selected, shoot walls in order to walk a new one.';
+async function webConnect(){
+  try{ bleStatus('Searching…');
+    const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'DISTO'}],optionalServices:[D2_SERVICE_GUESS]});
+    bleStatus('Connecting…'); const server=await dev.gatt.connect();
+    const svc=await server.getPrimaryService(D2_SERVICE_GUESS); const ch=await svc.getCharacteristic(D2_MEAS);
+    ch.addEventListener('characteristicvaluechanged',e=>{ const v=e.target.value; if(v.byteLength>=4) onMeters(v.getFloat32(0,true)); });
+    await ch.startNotifications();
+    dev.addEventListener('gattserverdisconnected',()=>{ bleDev=null; bleUi(); bleStatus('D2 disconnected'); });
+    bleDev={deviceId:dev.id,name:dev.name,web:dev}; bleUi(); bleStatus('● '+(dev.name||'D2'),true); renderEdit(connectedMsg(),'ok');
+  }catch(err){ bleDev=null; bleUi(); bleStatus(''); if(err&&err.name==='NotFoundError') return; renderEdit('Could not connect: '+String(err&&err.message||err),'err'); } }
+function hexToView(v){ if(v instanceof DataView) return v; const hex=String(v).replace(/[^0-9a-f]/gi,''); const b=new Uint8Array(hex.length/2); for(let i=0;i<b.length;i++) b[i]=parseInt(hex.substr(i*2,2),16); return new DataView(b.buffer); }
+async function bleConnect(){
+  try{
+    bleStatus('Searching…');
+    await BLE.initialize({});
+    const dev = await BLE.requestDevice({ namePrefix:'DISTO', optionalServices:[D2_SERVICE_GUESS] });
+    bleStatus('Connecting…');
+    await BLE.connect({ deviceId: dev.deviceId });
+    const {services} = await BLE.getServices({ deviceId: dev.deviceId });
+    const svc = (services||[]).find(s=>(s.characteristics||[]).some(c=>c.uuid.toLowerCase()===D2_MEAS));
+    if(!svc) throw new Error('This device does not send DISTO measurements. Check that it is a DISTO D2 with Bluetooth on.');
+    const service = svc.uuid.toLowerCase();
+    bleSubs.push(await BLE.addListener(`notification|${dev.deviceId}|${service}|${D2_MEAS}`, ev=>{
+      const dv = hexToView(ev.value); if(dv.byteLength<4) return;
+      onMeters(dv.getFloat32(0,true));
+    }));
+    bleSubs.push(await BLE.addListener(`disconnected|${dev.deviceId}`, ()=>{ bleDev=null; bleUi(); bleStatus('D2 disconnected'); }));
+    await BLE.startNotifications({ deviceId: dev.deviceId, service, characteristic: D2_MEAS });
+    bleDev = dev; bleUi(); bleStatus('● '+(dev.name||'D2'), true); renderEdit(connectedMsg(),'ok');
+  }catch(err){ bleDev=null; bleUi(); bleStatus(''); renderEdit(String(err && err.message || err).replace(/^Error:\s*/,''),'err'); }
+}
+async function bleDisconnect(){ if(!bleDev) return; try{ if(bleDev.web) bleDev.web.gatt.disconnect(); else await BLE.disconnect({deviceId:bleDev.deviceId}); }catch(e){} bleSubs.forEach(s=>s.remove&&s.remove()); bleSubs=[]; bleDev=null; bleUi(); bleStatus('Disconnected'); }
+function bleUi(){ $('ble-connect').hidden=!!bleDev; $('ble-disconnect').hidden=!bleDev; }
+if(BLE||WEBBLE){ $('ble-connect').hidden=false; $('ble-connect').onclick= BLE?bleConnect:webConnect; $('ble-disconnect').onclick=bleDisconnect; }
+
+all(); requestAnimationFrame(fit);
+})();
+</script>
+
+</body>
+</html>
