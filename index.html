@@ -79,6 +79,11 @@ svg#canvas.drawing{cursor:crosshair}
 .eb-msg.ok{color:var(--good)} .eb-msg.err{color:#c0392b}
 .editbar.flash{box-shadow:inset 0 0 0 3px var(--good)}
 .ble-state{font:12px var(--mono);color:var(--muted)}
+.dirs{display:grid;grid-template-columns:repeat(4,42px);gap:4px;flex:0 0 auto}
+.dir{height:48px;font:600 22px var(--body);border:1px solid var(--line);background:var(--field);color:var(--ink);border-radius:6px;cursor:pointer}
+.dir.on{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
+#eb-live{font:600 15px var(--mono);color:var(--accent);text-transform:none;letter-spacing:0}
+.btn:disabled{opacity:.45;cursor:default}
 .ble-state.on{color:var(--good)}
 @media (max-width:600px){.btn{padding:9px 12px} svg#canvas{height:56vh} .hint,#zin,#zout,.toolbar .sep{display:none} .brand small{display:none} .board{margin-inline:-6px}}
 @media (prefers-reduced-motion:no-preference){.editbar{transition:box-shadow .3s}}
@@ -167,18 +172,9 @@ td .sub{display:block;font-size:12px;color:var(--muted)}
       </div>
       <div class="rail">
         <div class="panel">
-          <h2>Laser walk</h2>
-          <p class="empty" style="margin:0;font-size:13px">For odd-shaped rooms. With no room selected, shoot each wall in order around the room. Each reading draws the next wall and turns right. Tap <b>Turn left</b> before a wall that turns left. The room closes when you get back to the start.</p>
-          <div class="row">
-            <label>Type a reading<input id="m-in" inputmode="decimal" autocomplete="off" placeholder="12.5 = 12′ 6″"></label>
-            <label style="flex:0 0 96px">Units<select id="m-unit"><option value="ft">feet</option><option value="m">meters</option></select></label>
-          </div>
-          <div class="row" style="align-items:center">
-            <span id="m-head" style="font:13px var(--mono);flex:1">Next wall east →</span>
-            <button class="btn ghost" data-turn="-1">↶ Turn left</button>
-            <button class="btn ghost" data-turn="1">↷ Turn right</button>
-          </div>
-          <div id="m-log" style="font:12px var(--mono);color:var(--muted);display:flex;flex-direction:column;gap:2px"></div>
+          <h2>Measuring</h2>
+          <p class="empty" style="margin:0;font-size:13px">Tap <b>Draw</b>, then drag your finger to aim and lift to drop each corner. Walls lock straight. With the D2 connected and no room selected, each shot draws the next wall.</p>
+          <label style="max-width:160px">Units<select id="m-unit"><option value="ft">feet &amp; inches</option><option value="m">meters</option></select></label>
         </div>
         <div class="panel">
           <h2>Rooms <span id="room-count" style="font-family:var(--mono);font-size:12px;letter-spacing:0"></span></h2>
@@ -266,7 +262,7 @@ function normalize(){ S.rooms.forEach(r=>{ if(!Array.isArray(r.measured)) r.meas
 normalize();
 const save = () => { try{ localStorage.setItem(KEY, JSON.stringify(S)) }catch(e){} };
 
-let mode='select', draft=[], hover=null, selected=null, selWall=null, lastWall=null, pointers=new Map(), bleDev=null, view={x:-3,y:-3,w:42,h:34}, drag=null;
+let mode='select', draft=[], draftKeys=new Set(), aim=null, wallPicked=false, hover=null, selected=null, selWall=null, lastWall=null, pointers=new Map(), bleDev=null, view={x:-3,y:-3,w:42,h:34}, drag=null;
 const $ = id => document.getElementById(id);
 const svg = $('canvas'), layer = $('layer');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -376,13 +372,20 @@ function render(){
     h+=`<line data-room="${r.id}" data-wall="${i}" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="transparent" stroke-width="${fs*1.9}" stroke-linecap="round" pointer-events="stroke" style="cursor:pointer"/>`; });
   const sr=S.rooms.find(r=>r.id===selected);
   if(sr && mode==='select') sr.pts.forEach((q,i)=>{ h+=`<circle data-vi="${i}" cx="${q[0]}" cy="${q[1]}" r="${fs*0.42}" fill="var(--sheet)" stroke="var(--sel)" stroke-width="${fs*0.12}" style="cursor:grab"/>`; });
+  if(sr && mode==='select') sr.pts.forEach((q,i)=>{ h+=`<circle data-vi="${i}" cx="${q[0]}" cy="${q[1]}" r="${fs*1.1}" fill="transparent" style="cursor:grab"/>`; });
   if(mode==='draw'){
-    const pts = hover? [...draft,hover] : draft;
-    if(pts.length) h+=`<polyline points="${pts.map(q=>q.join(',')).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="0.12" stroke-dasharray="0.4 0.25"/>`;
-    for(let i=1;i<pts.length;i++){ const [x1,y1]=pts[i-1],[x2,y2]=pts[i]; const L=Math.hypot(x2-x1,y2-y1); if(L<0.5) continue;
-      h+=`<text x="${(x1+x2)/2}" y="${(y1+y2)/2-fs*0.5}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="${fs*0.85}" fill="var(--accent)" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.15}" pointer-events="none">${fmtLen(L)}</text>`; }
-    draft.forEach((q,i)=>{ h+=`<circle cx="${q[0]}" cy="${q[1]}" r="${fs*(i===0&&draft.length>=3?0.5:0.3)}" fill="${i===0?'var(--accent)':'var(--sheet)'}" stroke="var(--accent)" stroke-width="${fs*0.1}" pointer-events="none"/>`; });
-    if(hover) h+=`<circle cx="${hover[0]}" cy="${hover[1]}" r="${fs*0.22}" fill="var(--accent)" pointer-events="none"/>`;
+    const lw=fs*0.07;
+    if(hover){ h+=`<line x1="${view.x}" y1="${hover[1]}" x2="${view.x+view.w}" y2="${hover[1]}" stroke="var(--accent)" stroke-opacity=".45" stroke-width="${lw}" pointer-events="none"/><line x1="${hover[0]}" y1="${view.y}" x2="${hover[0]}" y2="${view.y+view.h}" stroke="var(--accent)" stroke-opacity=".45" stroke-width="${lw}" pointer-events="none"/>`;
+      if(aim&&aim.guideX!=null) h+=`<line x1="${aim.guideX}" y1="${view.y}" x2="${aim.guideX}" y2="${view.y+view.h}" stroke="var(--sel)" stroke-width="${lw*1.6}" stroke-dasharray="${fs*0.4} ${fs*0.25}" pointer-events="none"/>`;
+      if(aim&&aim.guideY!=null) h+=`<line x1="${view.x}" y1="${aim.guideY}" x2="${view.x+view.w}" y2="${aim.guideY}" stroke="var(--sel)" stroke-width="${lw*1.6}" stroke-dasharray="${fs*0.4} ${fs*0.25}" pointer-events="none"/>`; }
+    const pts = hover&&!(aim&&aim.close) ? [...draft,hover] : aim&&aim.close ? [...draft,draft[0]] : draft;
+    if(pts.length>1) h+=`<polyline points="${pts.map(q=>q.join(',')).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="${fs*0.16}" stroke-linejoin="miter" stroke-linecap="square" pointer-events="none"/>`;
+    for(let i=1;i<pts.length;i++){ const [x1,y1]=pts[i-1],[x2,y2]=pts[i]; const L=Math.hypot(x2-x1,y2-y1); if(L<0.25) continue; const live=i===pts.length-1&&hover;
+      const vert=Math.abs(x2-x1)<1e-6; const tx=(x1+x2)/2+(vert?fs*1.1:0), ty=(y1+y2)/2-(vert?0:fs*0.7);
+      h+=`<text x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="middle" font-family="JetBrains Mono,monospace" font-size="${fs*(live?1.15:0.85)}" font-weight="${live?700:500}" fill="var(--accent)" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.2}" pointer-events="none">${fmtLen(L)}</text>`; }
+    draft.forEach((q,i)=>{ const first=i===0&&draft.length>=3; h+=`<circle cx="${q[0]}" cy="${q[1]}" r="${fs*(first?0.55:0.32)}" fill="${i===0?'var(--accent)':'var(--sheet)'}" stroke="var(--accent)" stroke-width="${fs*0.12}" pointer-events="none"/>`;
+      if(first&&aim&&aim.close) h+=`<circle cx="${q[0]}" cy="${q[1]}" r="${fs*1.1}" fill="none" stroke="var(--good)" stroke-width="${fs*0.15}" pointer-events="none"/>`; });
+    if(hover&&!(aim&&aim.close)) h+=`<circle cx="${hover[0]}" cy="${hover[1]}" r="${fs*0.4}" fill="var(--accent)" stroke="var(--sheet)" stroke-width="${fs*0.1}" pointer-events="none"/>`;
   }
   layer.innerHTML=h;
   const q=quote(); const tot=S.rooms.reduce((s,r)=>s+Math.abs(area(r.pts)),0);
@@ -407,7 +410,14 @@ function productOptions(id){ return '<option value="">— No flooring —</optio
 const selRoom = () => S.rooms.find(r=>r.id===selected);
 function renderEdit(msg,cls){
   const eb=$('editbar'); const r=selRoom();
-  if(mode==='draw'){ eb.innerHTML='<div class="eb-msg">Tap each corner on the grid. Tap the first corner again to close the room.</div>'; return; }
+  if(mode==='draw'){ const n=draft.length, metric=$('m-unit').value==='m';
+    const help = n ? 'Drag to aim, lift to drop the next corner. Or pick a direction, then shoot the D2 or type a length.' : 'Tap where the room starts, or pick a direction and shoot the first wall with the D2.';
+    eb.innerHTML=`<div class="eb-row"><span class="eb-label">${n?`Drawing · ${n-1} wall${n-1===1?'':'s'}`:'Draw a room'} <span id="eb-live"></span></span></div>
+    <div class="eb-row"><div class="dirs" role="group" aria-label="Next wall direction">${[3,2,0,1].map(d=>`<button class="dir${d===heading?' on':''}" data-dir="${d}" aria-label="Next wall ${DIRS[d][2]}">${DIRS[d][3]}</button>`).join('')}</div>
+      ${metric?'<div class="lenbox"><input id="eb-ft" inputmode="decimal" autocomplete="off" aria-label="Length in meters"><span>m</span></div>':'<div class="lenbox"><input id="eb-ft" inputmode="decimal" autocomplete="off" aria-label="Feet"><span>ft</span></div><div class="lenbox"><input id="eb-in" inputmode="decimal" autocomplete="off" aria-label="Inches"><span>in</span></div>'}
+      <button class="btn primary big" id="eb-add">Add wall</button></div>
+    <div class="eb-row"><button class="btn big" id="eb-dundo"${n?'':' disabled'}>Undo</button><button class="btn primary big" id="eb-close"${n>=3?'':' disabled'}>Close room</button><button class="btn ghost big" id="eb-dcancel">Cancel</button></div>
+    <div class="eb-msg ${cls||''}">${esc(msg||help)}</div>`; return; }
   if(!r){ eb.innerHTML=`<div class="eb-msg ${cls||''}">${msg?esc(msg):S.rooms.length?'Tap a room to measure its walls, or add another room.':'Start with <b>+ Rectangle</b> or <b>+ L-shape</b>, then shoot each wall with your D2.'}</div>`; return; }
   const n=r.pts.length; if(selWall==null||selWall>=n) selWall=nextNeeded(r,-1)??0;
   const chips=r.pts.map((_,i)=>{ const a=axisOf(r.pts,i), st=wallState(r,i); return `<button class="chip ${st}${i===selWall?' on':''}" data-chip="${i}" id="chip-${i}" title="${st==='done'?'Measured':st==='need'?'Needs measuring':'Set by the other walls'}">${st==='done'?'✓ ':''}${i+1} · ${fmtLen(a?a.L:0)}</button>`; }).join('');
@@ -424,13 +434,13 @@ function renderEdit(msg,cls){
       <button class="btn primary big" id="eb-set">Set</button>${lastWall&&lastWall.id===r.id?'<button class="btn ghost big" id="eb-undo">Undo</button>':''}</div>
     <div class="eb-msg ${cls||''}">${esc(msg)}</div>`;
 }
-function selectRoom(id,wall){ selected=id; const r=selRoom(); selWall = r ? (wall!=null?wall:(nextNeeded(r,-1)??0)) : null; render(); renderRooms(); renderEdit(); }
+function selectRoom(id,wall){ selected=id; wallPicked = wall!=null; const r=selRoom(); selWall = r ? (wall!=null?wall:(nextNeeded(r,-1)??0)) : null; render(); renderRooms(); renderEdit(); }
 function applyWall(L){
   const r=selRoom(); if(!r) return; const i=selWall;
   const snap0={id:r.id,pts:r.pts.map(q=>[...q]),measured:[...r.measured],wall:i};
   const res=setWall(r,i,L); if(res!==true){ renderEdit(res,'err'); return; }
   lastWall=snap0; save(); const nx=nextNeeded(r,i); let msg, cls='';
-  if(nx==null){ msg=`${r.name} is done · ${num(Math.abs(area(r.pts)),1)} sq ft. Pick its flooring above, then add the next room.`; cls='ok'; }
+  if(nx==null){ wallPicked=false; msg=`${r.name} is done · ${num(Math.abs(area(r.pts)),1)} sq ft. Pick its flooring above, then add the next room.`; cls='ok'; }
   else { selWall=nx; msg=`Wall ${i+1} set to ${fmtLen(L)}. Next: the ${sideOf(r,nx)} wall.`; }
   render(); renderRooms(); renderEdit(msg,cls);
   const eb=$('editbar'); eb.classList.add('flash'); setTimeout(()=>eb.classList.remove('flash'),350); }
@@ -470,30 +480,81 @@ function renderQuote(){
 function all(){ render(); renderRooms(); renderEdit(); }
 
 // ---- interactions
-function setMode(m){ mode=m; draft=[]; hover=null; $('mode-select').setAttribute('aria-pressed',m==='select'); $('mode-draw').setAttribute('aria-pressed',m==='draw');
-  ['undo-pt','finish','cancel'].forEach(id=>$(id).hidden=m!=='draw'); svg.classList.toggle('drawing',m==='draw');
+function setMode(m){ mode=m; draft=[]; draftKeys=new Set(); hover=null; aim=null; heading=0; $('mode-select').setAttribute('aria-pressed',m==='select'); $('mode-draw').setAttribute('aria-pressed',m==='draw');
+  svg.classList.toggle('drawing',m==='draw');
   ['add-rect','add-l','mode-draw'].forEach(id=>$(id).hidden=m==='draw');
-  $('hint').textContent = m==='draw' ? 'Tap corners · tap first point to close' : 'Tap a wall to measure it'; render(); renderEdit(); }
-function finishDraft(){ if(draft.length<3) return; const id=uid('r'); S.rooms.push({id,name:'Room '+(S.rooms.length+1),pts:draft,productId:S.products[0]?.id||'',base:true,measured:draft.map(()=>false)}); save(); setMode('select'); selectRoom(id,0); }
+  $('hint').textContent = m==='draw' ? 'Drag to aim · lift to drop a corner · two fingers to zoom' : 'Tap a wall to measure it · drag a wall to move it'; render(); renderEdit(); }
+const gridStep = () => view.w<14 ? 1/12 : view.w<45 ? 0.5 : 1;
+const segKey = (a,b) => [a,b].map(q=>r96(q[0])+','+r96(q[1])).sort().join('|');
+const dirOf = (a,b) => { const dx=b[0]-a[0], dy=b[1]-a[1]; return Math.abs(dx)>=Math.abs(dy) ? (dx>=0?0:2) : (dy>=0?1:3); };
+// Where a finger at `raw` puts the next corner: walls lock horizontal/vertical, lengths snap to the grid, and corners line up with nearby corners.
+function drawSnap(raw){
+  const px=view.w/(svg.clientWidth||700), tol=24*px, g=gridStep(), last=draft[draft.length-1];
+  const cands=draft.concat(S.rooms.flatMap(r=>r.pts));
+  if(draft.length>=3 && Math.hypot(raw[0]-draft[0][0],raw[1]-draft[0][1])<tol*1.5) return {pt:[...draft[0]],close:true};
+  if(!last){ let best=null,bd=tol; for(const c of cands){ const d=Math.hypot(raw[0]-c[0],raw[1]-c[1]); if(d<bd){bd=d;best=c;} }
+    return {pt: best?[...best]:[r96(Math.round(raw[0]/g)*g), r96(Math.round(raw[1]/g)*g)]}; }
+  const dx=raw[0]-last[0], dy=raw[1]-last[1];
+  if(Math.abs(dx)>=Math.abs(dy)){ let x=last[0]+Math.round(dx/g)*g, gx=null, bd=tol;
+    for(const c of cands){ if(c===last) continue; const d=Math.abs(raw[0]-c[0]); if(d<bd){bd=d;x=c[0];gx=c[0];} }
+    return {pt:[r96(x),last[1]],guideX:gx}; }
+  let y=last[1]+Math.round(dy/g)*g, gy=null, bd=tol;
+  for(const c of cands){ if(c===last) continue; const d=Math.abs(raw[1]-c[1]); if(d<bd){bd=d;y=c[1];gy=c[1];} }
+  return {pt:[last[0],r96(y)],guideY:gy}; }
+function liveUpdate(){ const el=$('eb-live'); if(!el) return; if(!aim){ el.textContent=''; return; }
+  if(aim.close){ el.textContent='lift to close the room'; return; } const last=draft[draft.length-1];
+  if(!last){ el.textContent='lift to start here'; return; } const L=Math.hypot(aim.pt[0]-last[0],aim.pt[1]-last[1]); el.textContent= L>0 ? `${fmtLen(L)} ${DIRS[dirOf(last,aim.pt)][3]}` : ''; }
+function placeAim(){ const a=aim; aim=null; if(!a) return; if(a.close){ hover=null; closeDraft(); return; }
+  const last=draft[draft.length-1]; if(last && Math.hypot(a.pt[0]-last[0],a.pt[1]-last[1])<1e-6){ render(); renderEdit(); return; }
+  draft.push(a.pt); if(last) heading=(dirOf(last,a.pt)+1)%4; render(); renderEdit(); }
+function cleanPts(p){ const pts=p.map(q=>[...q]); let again=true;
+  while(again && pts.length>=3){ again=false; for(let i=0;i<pts.length;i++){ const n=pts.length, a=pts[(i-1+n)%n], b=pts[i], c=pts[(i+1)%n];
+    const cr=(b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0]); if(Math.hypot(b[0]-a[0],b[1]-a[1])<1e-6 || Math.abs(cr)<1e-6){ pts.splice(i,1); again=true; break; } } }
+  return pts; }
+function closeDraft(){
+  if(draft.length<3){ renderEdit('Add at least two walls before closing the room.','err'); return; }
+  let pts=draft.map(q=>[...q]); const f=pts[0]; let l=pts[pts.length-1];
+  const ex=Math.abs(f[0]-l[0]), ey=Math.abs(f[1]-l[1]);
+  if(ex>1e-6 && ey>1e-6){ const n=pts.length, pl=pts[n-2], lastHoriz=Math.abs(pl[1]-l[1])<1e-6;
+    if((lastHoriz ? ey<0.75 : ex<0.75) && n>=4){ // small gap from real-world readings: slide the last wall onto the start line
+      if(lastHoriz){ pts[n-1][1]=f[1]; pts[n-2][1]=f[1]; } else { pts[n-1][0]=f[0]; pts[n-2][0]=f[0]; } }
+    else pts.push(lastHoriz?[l[0],f[1]]:[f[0],l[1]]); }
+  pts=cleanPts(pts);
+  if(pts.length<3 || Math.abs(area(pts))<0.25){ renderEdit('That shape has no floor area. Tap Undo and try again.','err'); return; }
+  const measured=pts.map((q,i)=>draftKeys.has(segKey(q,pts[(i+1)%pts.length])));
+  const id=uid('r'); S.rooms.push({id,name:'Room '+(S.rooms.length+1),pts,productId:S.products[0]?.id||'',base:true,measured});
+  save(); setMode('select'); selectRoom(id); wallPicked=false; fit();
+  const r=selRoom(); if(r && nextNeeded(r,-1)==null) renderEdit(`${r.name} closed · ${num(Math.abs(area(r.pts)),1)} sq ft. Name it and pick flooring above.`,'ok'); }
+function addSegment(L,dir){
+  if(mode!=='draw'){ selected=null; selWall=null; setMode('draw'); renderRooms(); }
+  if(!draft.length){ const all=S.rooms.flatMap(r=>r.pts); draft.push([all.length?snap(Math.max(...all.map(q=>q[0]))+3):0, all.length?snap(Math.min(...all.map(q=>q[1]))):0]); }
+  const last=draft[draft.length-1], d=DIRS[dir], np=[r96(last[0]+d[0]*L), r96(last[1]+d[1]*L)];
+  draftKeys.add(segKey(last,np)); draft.push(np); heading=(dir+1)%4;
+  if(draft.length>=5 && Math.hypot(np[0]-draft[0][0],np[1]-draft[0][1])<0.75){ draftKeys.add(segKey(last,draft[0])); closeDraft(); return; }
+  const m=fs0()*2; if(np[0]<view.x+m||np[0]>view.x+view.w-m||np[1]<view.y+m||np[1]>view.y+view.h-m) fit(); else render();
+  renderEdit(`Wall ${draft.length-1}: ${fmtLen(L)} ${DIRS[dir][3]}. Next wall goes ${DIRS[heading][2]}. Tap an arrow to change it.`); }
+const fs0 = () => view.w/(svg.clientWidth||700)*14;
+function undoPoint(){ if(!draft.length) return; const gone=draft.pop(); const prev=draft[draft.length-1]; if(prev) draftKeys.delete(segKey(prev,gone));
+  heading = draft.length>=2 ? (dirOf(draft[draft.length-2],draft[draft.length-1])+1)%4 : 0; render(); renderEdit(); }
+function finishDraft(){ closeDraft(); }
 $('add-rect').onclick=()=>addTemplate('rect'); $('add-l').onclick=()=>addTemplate('L');
-$('mode-select').onclick=()=>setMode('select'); $('mode-draw').onclick=()=>{selected=null;setMode('draw');renderRooms();};
-$('undo-pt').onclick=()=>{draft.pop(); walkLog.pop(); heading=(heading+3)%4; headLabel(); showLog(); render();}; $('cancel').onclick=()=>setMode('select'); $('finish').onclick=finishDraft;
+$('mode-select').onclick=()=>setMode('select'); $('mode-draw').onclick=()=>{selected=null;selWall=null;setMode('draw');renderRooms();};
+$('undo-pt').onclick=undoPoint; $('cancel').onclick=()=>setMode('select'); $('finish').onclick=closeDraft;
 
 function pinchStart(){ const [a,b]=[...pointers.values()]; const mx=(a[0]+b[0])/2, my=(a[1]+b[1])/2;
   if(drag&&drag.type==='room'){ const r=selRoom(); if(r) r.pts=drag.orig; }
-  drag={type:'pinch',d0:Math.hypot(a[0]-b[0],a[1]-b[1])||1,mid:toWorld({clientX:mx,clientY:my}),v:{...view}}; }
+  if(drag&&(drag.type==='wall'||drag.type==='vertex')){ const r=selRoom(); if(r) r.pts=drag.orig; }
+  drag={type:'pinch',d0:Math.hypot(a[0]-b[0],a[1]-b[1])||1,mid:toWorld({clientX:mx,clientY:my}),v:{...view}}; render(); }
 svg.addEventListener('pointerdown',e=>{
   pointers.set(e.pointerId,[e.clientX,e.clientY]);
-  if(pointers.size===2 && mode==='select'){ pinchStart(); return; }
+  if(pointers.size===2){ aim=null; hover=null; pinchStart(); return; }
   if(pointers.size>2) return;
   const w=toWorld(e);
-  if(mode==='draw'){ const pt=[snap(w[0]),snap(w[1])];
-    if(draft.length>=3 && Math.hypot(pt[0]-draft[0][0],pt[1]-draft[0][1])<0.6){ finishDraft(); return; }
-    const last=draft[draft.length-1]; if(!last||last[0]!==pt[0]||last[1]!==pt[1]) draft.push(pt); render(); return; }
+  if(mode==='draw'){ svg.setPointerCapture(e.pointerId); aim=drawSnap(w); hover=aim.pt; drag={type:'aim'}; render(); liveUpdate(); return; }
   svg.setPointerCapture(e.pointerId);
   const t=e.target, vi=t.dataset.vi, rid=t.dataset.room, wi=t.dataset.wall;
-  if(vi!==undefined){ drag={type:'vertex',i:+vi}; }
-  else if(rid && wi!==undefined){ selectRoom(rid,+wi); drag={type:'none'}; return; }
+  if(vi!==undefined){ const r=selRoom(); drag={type:'vertex',i:+vi,orig:r.pts.map(q=>[...q])}; }
+  else if(rid && wi!==undefined){ selectRoom(rid,+wi); const r=selRoom(); drag={type:'wall',i:+wi,start:w,orig:r.pts.map(q=>[...q]),moved:false}; return; }
   else if(rid){ const r=S.rooms.find(x=>x.id===rid); if(selected!==rid) selectRoom(rid); drag={type:'room',start:w,orig:r.pts.map(q=>[...q]),moved:false}; }
   else { drag={type:'pan',sx:e.clientX,sy:e.clientY,v:{...view},scale:svg.getScreenCTM().a,moved:false}; }
   render();
@@ -501,22 +562,33 @@ svg.addEventListener('pointerdown',e=>{
 svg.addEventListener('pointermove',e=>{
   if(pointers.has(e.pointerId)) pointers.set(e.pointerId,[e.clientX,e.clientY]);
   if(drag&&drag.type==='pinch'){ if(pointers.size<2) return; const [a,b]=[...pointers.values()]; const d=Math.hypot(a[0]-b[0],a[1]-b[1])||1;
-    const nw=Math.min(300,Math.max(6,drag.v.w*drag.d0/d)); const k=nw/drag.v.w, m=drag.mid; view={x:m[0]-(m[0]-drag.v.x)*k,y:m[1]-(m[1]-drag.v.y)*k,w:nw,h:drag.v.h*k}; render(); return; }
-  if(mode==='draw'){ const w=toWorld(e); hover=[snap(w[0]),snap(w[1])]; render(); return; }
+    const nw=Math.min(300,Math.max(6,drag.v.w*drag.d0/d)), k=nw/drag.v.w, m=drag.mid, rc=svg.getBoundingClientRect(), sc=nw/(svg.clientWidth||700);
+    const cx=(a[0]+b[0])/2-rc.left, cy=(a[1]+b[1])/2-rc.top; view={x:m[0]-cx*sc, y:m[1]-cy*sc, w:nw, h:drag.v.h*k}; render(); return; }
+  if(mode==='draw'){ if((drag&&drag.type==='aim') || (e.pointerType==='mouse'&&!drag)){ aim=drawSnap(toWorld(e)); hover=aim.pt; render(); liveUpdate(); } return; }
   if(!drag||drag.type==='none') return;
   if(drag.type==='pan'){ const dx=(e.clientX-drag.sx)/drag.scale, dy=(e.clientY-drag.sy)/drag.scale; if(Math.abs(dx)+Math.abs(dy)>0.2) drag.moved=true; view.x=drag.v.x-dx; view.y=drag.v.y-dy; render(); return; }
   const w=toWorld(e); const r=S.rooms.find(x=>x.id===selected); if(!r) return;
-  if(drag.type==='vertex'){ r.pts[drag.i]=[snap(w[0]),snap(w[1])]; }
+  if(drag.type==='vertex'){ const g=gridStep(), o=drag.orig, n=o.length, i=drag.i, a=(i-1+n)%n, b=(i+1)%n, p=o.map(q=>[...q]);
+    p[i]=[r96(Math.round(w[0]/g)*g), r96(Math.round(w[1]/g)*g)];
+    for(const k of [a,b]){ if(Math.abs(o[k][1]-o[i][1])<1e-6) p[k]=[o[k][0],p[i][1]]; else if(Math.abs(o[k][0]-o[i][0])<1e-6) p[k]=[p[i][0],o[k][1]]; }
+    r.pts=p; }
+  else if(drag.type==='wall'){ const o=drag.orig, i=drag.i, j=(i+1)%o.length, a=axisOf(o,i); if(!a||a.ax==='d') return;
+    const px=view.w/(svg.clientWidth||700), g=gridStep(), d = a.ax==='x' ? w[1]-drag.start[1] : w[0]-drag.start[0];
+    if(!drag.moved && Math.abs(d)<10*px) return; drag.moved=true; const dd=Math.round(d/g)*g, p=o.map(q=>[...q]);
+    if(a.ax==='x'){ p[i][1]=r96(o[i][1]+dd); p[j][1]=r96(o[j][1]+dd); } else { p[i][0]=r96(o[i][0]+dd); p[j][0]=r96(o[j][0]+dd); }
+    r.pts=p; }
   else { const dx=snap(w[0]-drag.start[0]), dy=snap(w[1]-drag.start[1]); if(dx||dy) drag.moved=true; r.pts=drag.orig.map(q=>[q[0]+dx,q[1]+dy]); }
   render();
 });
 function pointerEnd(e){ pointers.delete(e.pointerId); if(!drag) return;
   if(drag.type==='pinch'){ if(pointers.size===0) drag=null; return; }
+  if(drag.type==='aim'){ drag=null; placeAim(); if(e.pointerType!=='mouse'){ hover=null; render(); } return; }
+  if(drag.type==='vertex'||(drag.type==='wall'&&drag.moved)){ const r=selRoom(); if(r){ r.pts.forEach((_,k)=>{ const a=axisOf(r.pts,k), b=axisOf(drag.orig,k); if(!a||!b||Math.abs(a.L-b.L)>1/192) r.measured[k]=false; }); } save(); renderRooms(); renderEdit(); drag=null; return; }
   if(drag.type==='pan' && !drag.moved && selected){ selected=null; selWall=null; renderRooms(); render(); renderEdit(); }
   if(drag.type==='vertex'||drag.type==='room'){ save(); renderRooms(); if(drag.type==='vertex') renderEdit(); }
   drag=null; }
 svg.addEventListener('pointerup',pointerEnd); svg.addEventListener('pointercancel',pointerEnd);
-svg.addEventListener('pointerleave',()=>{ if(mode==='draw'){hover=null;render();} });
+svg.addEventListener('pointerleave',e=>{ if(mode==='draw'&&e.pointerType==='mouse'&&!drag){ hover=null; aim=null; render(); liveUpdate(); } });
 function zoom(f,cx,cy){ cx??=view.x+view.w/2; cy??=view.y+view.h/2; const nw=Math.min(300,Math.max(6,view.w*f)); const k=nw/view.w; view={x:cx-(cx-view.x)*k,y:cy-(cy-view.y)*k,w:nw,h:view.h*k}; render(); }
 svg.addEventListener('wheel',e=>{ e.preventDefault(); const w=toWorld(e); zoom(e.deltaY>0?1.12:1/1.12,w[0],w[1]); },{passive:false});
 $('zin').onclick=()=>zoom(1/1.25); $('zout').onclick=()=>zoom(1.25);
@@ -525,7 +597,8 @@ function fit(){ const pts=S.rooms.flatMap(r=>r.pts).concat(draft); if(!pts.lengt
 $('fit').onclick=fit;
 document.addEventListener('keydown',e=>{ if(e.target.matches('input,select,textarea')) return;
   if(e.key==='Escape'&&mode==='draw') setMode('select');
-  if(e.key==='Enter'&&mode==='draw') finishDraft();
+  if(e.key==='Enter'&&mode==='draw') closeDraft();
+  if((e.key==='z'&&(e.metaKey||e.ctrlKey))&&mode==='draw'){ e.preventDefault(); undoPoint(); }
   if((e.key==='Delete'||e.key==='Backspace')&&selected&&mode==='select'){ e.preventDefault(); delRoom(selected); } });
 
 
@@ -541,8 +614,16 @@ $('rooms').addEventListener('click',e=>{ const d=e.target.closest('[data-del]');
 $('rooms').addEventListener('focusin',e=>{ const card=e.target.closest('.room'); if(card&&card.dataset.id!==selected){ selected=card.dataset.id; selWall=null; render(); renderEdit(); document.querySelectorAll('.room').forEach(c=>c.classList.toggle('sel',c.dataset.id===selected)); } });
 
 const eb=$('editbar');
-eb.addEventListener('click',e=>{ const r=selRoom(); if(!r) return; const c=e.target.closest('[data-chip]');
-  if(c){ selWall=+c.dataset.chip; render(); renderEdit(); return; }
+eb.addEventListener('click',e=>{
+  if(mode==='draw'){ const d=e.target.closest('[data-dir]');
+    if(d){ heading=+d.dataset.dir; eb.querySelectorAll('.dir').forEach(b=>b.classList.toggle('on',+b.dataset.dir===heading)); return; }
+    if(e.target.id==='eb-add'){ const L=readEditLen(); if(!(L>0)){ renderEdit('Type a length first, like 12 ft 6 in.','err'); return; } addSegment(L,heading); return; }
+    if(e.target.id==='eb-dundo'){ undoPoint(); return; }
+    if(e.target.id==='eb-close'){ closeDraft(); return; }
+    if(e.target.id==='eb-dcancel'){ setMode('select'); return; }
+    return; }
+  const r=selRoom(); if(!r) return; const c=e.target.closest('[data-chip]');
+  if(c){ selWall=+c.dataset.chip; wallPicked=true; render(); renderEdit(); return; }
   if(e.target.id==='eb-set'){ const L=readEditLen(); if(!(L>0)){ renderEdit('Type a length first, like 12 ft 6 in.','err'); return; } applyWall(L); return; }
   if(e.target.id==='eb-undo'&&lastWall){ const u=lastWall; const rr=S.rooms.find(x=>x.id===u.id); if(rr){ rr.pts=u.pts; rr.measured=u.measured; selWall=u.wall; } lastWall=null; save(); render(); renderRooms(); renderEdit('Undone.'); return; }
   if(e.target.id==='eb-del') delRoom(r.id); });
@@ -550,7 +631,7 @@ eb.addEventListener('input',e=>{ const r=selRoom(); if(!r) return; if(e.target.i
 eb.addEventListener('change',e=>{ const r=selRoom(); if(!r) return; if(e.target.id==='eb-prod'){ r.productId=e.target.value; save(); render(); renderRooms(); } });
 eb.addEventListener('keydown',e=>{ if(e.key!=='Enter') return;
   if(e.target.id==='eb-ft'&&$('eb-in')&&!$('eb-in').value&&!/['′"″a-z]/i.test(e.target.value)){ e.preventDefault(); $('eb-in').focus(); return; }
-  if(e.target.id==='eb-ft'||e.target.id==='eb-in'){ e.preventDefault(); $('eb-set').click(); } });
+  if(e.target.id==='eb-ft'||e.target.id==='eb-in'){ e.preventDefault(); ($('eb-set')||$('eb-add')).click(); } });
 $('m-unit').addEventListener('change',()=>renderEdit());
 $('new-job').onclick=()=>{ $('confirm').hidden=false; };
 $('cf-no').onclick=()=>{ $('confirm').hidden=true; };
@@ -579,9 +660,9 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{ const v=b.dat
   document.querySelectorAll('.view').forEach(s=>s.hidden=s.id!=='view-'+v);
   if(v==='products') renderProducts(); if(v==='quote') renderQuote(); if(v==='plan'){ all(); requestAnimationFrame(fit); } });
 
-// ---- laser walk entry
-const DIRS=[[1,0,'east →'],[0,1,'south ↓'],[-1,0,'west ←'],[0,-1,'north ↑']];
-let heading=0, walkLog=[];
+// ---- directions for drawing by length: [dx, dy, word, arrow]
+const DIRS=[[1,0,'right','→'],[0,1,'down','↓'],[-1,0,'left','←'],[0,-1,'up','↑']];
+let heading=0;
 function parseLen(s,unit){ s=String(s).trim().toLowerCase().replace(/,/g,'.'); if(!s) return NaN; let m;
   if(m=s.match(/^([\d.]+)\s*mm$/)) return +m[1]/304.8;
   if(m=s.match(/^([\d.]+)\s*cm$/)) return +m[1]/30.48;
@@ -590,20 +671,6 @@ function parseLen(s,unit){ s=String(s).trim().toLowerCase().replace(/,/g,'.'); i
   if(m=s.match(/^(\d+(?:\.\d+)?)\s*(?:(\d+)\s*\/\s*(\d+))?\s*(?:"|″|in)$/)) return (+m[1]+(m[2]?m[2]/m[3]:0))/12;
   if(m=s.match(/^([\d.]+)$/)){ const v=+m[1]; return unit==='m'?v*3.28084:unit==='in'?v/12:v; }
   return NaN; }
-function headLabel(){ $('m-head').textContent='Next wall '+DIRS[heading][2]; }
-function showLog(msg){ $('m-log').innerHTML = walkLog.map((t,i)=>`<span>Wall ${i+1}: ${t}</span>`).join('') + (msg?`<span style="color:var(--accent)">${esc(msg)}</span>`:''); }
-function takeReading(feet){ const inp=$('m-in'); const L= feet>0 ? feet : parseLen(inp.value,$('m-unit').value);
-  if(!(L>0)){ showLog(`Couldn't read "${inp.value}". Try 12' 6" or 3.81 m.`); inp.select(); return; }
-  if(mode!=='draw'){ selected=null; setMode('draw'); renderRooms(); }
-  if(!draft.length){ const pts=S.rooms.flatMap(r=>r.pts); draft.push([pts.length?snap(Math.max(...pts.map(p=>p[0]))+3):0,0]); heading=0; walkLog=[]; }
-  const [x,y]=draft[draft.length-1], d=DIRS[heading], r8=v=>Math.round(v*96)/96;
-  const np=[r8(x+d[0]*L), r8(y+d[1]*L)]; draft.push(np);
-  walkLog.push(`${fmtLen(L)} ${DIRS[heading][2]}`); heading=(heading+1)%4; inp.value='';
-  if(draft.length>=4 && Math.hypot(np[0]-draft[0][0],np[1]-draft[0][1])<0.25){ draft.pop(); const n=walkLog.length; finishDraft(); const rr=selRoom(); if(rr) rr.measured=rr.pts.map(()=>true); save(); selected=null; selWall=null; heading=0; walkLog=[]; all(); renderEdit(`Room closed after ${n} walls. Tap it to name it and pick flooring, or keep shooting the next room.`,'ok'); showLog(`Room closed after ${n} walls.`); }
-  else showLog();
-  headLabel(); fit(); if(!(feet>0)) inp.focus(); }
-$('m-in').addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key==='Tab'){ e.preventDefault(); takeReading(); } });
-document.querySelectorAll('[data-turn]').forEach(b=>b.onclick=()=>{ heading=(heading+ +b.dataset.turn+4)%4; headLabel(); $('m-in').focus(); });
 
 // ---- DISTO D2 over Bluetooth LE: native app (@capacitor-community/bluetooth-le) or browsers with Web Bluetooth
 // The D2 sends each reading as a notification: a 4-byte little-endian float, in meters.
@@ -615,9 +682,9 @@ const policy = document.permissionsPolicy || document.featurePolicy;
 const WEBBLE = !BLE && !!navigator.bluetooth && !!(!policy || !policy.allowsFeature || policy.allowsFeature('bluetooth'));
 let bleSubs=[], lastBleAt=0;
 function bleStatus(t,ok){ const el=$('ble-state'); el.textContent=t; el.classList.toggle('on',!!ok); }
-function laserReading(feet){ if(mode==='select' && selRoom()){ applyWall(feet); } else takeReading(feet); }
+function laserReading(feet){ const r=selRoom(); if(mode==='select' && r && (wallPicked || nextNeeded(r,-1)!=null)){ applyWall(feet); } else addSegment(feet,heading); }
 function onMeters(m){ const now=Date.now(); if(!(m>0) || now-lastBleAt<300) return; lastBleAt=now; laserReading(m*3.28084); }
-const connectedMsg = () => selRoom() ? 'D2 connected. Press its measure button to fill the highlighted wall.' : 'D2 connected. Add a room, or with no room selected, shoot walls in order to walk a new one.';
+const connectedMsg = () => selRoom() ? 'D2 connected. Press its measure button to fill the highlighted wall.' : 'D2 connected. Each shot draws the next wall of a new room, or tap a room to measure its walls.';
 async function webConnect(){
   try{ bleStatus('Searching…');
     const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'DISTO'}],optionalServices:[D2_SERVICE_GUESS]});
