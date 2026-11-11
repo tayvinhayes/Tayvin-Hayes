@@ -9,13 +9,13 @@
 <title>Floorplot Takeoff</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <style>
-/* Layout: drafting sheet — plan canvas left, takeoff rail right; stacks on phones */
+/* Layout: app shell — header, full-bleed drawing with a docked sheet (bottom on phones, right on wide screens), tab bar */
 :root{
   --paper:#e9ece7; --sheet:#f8f9f6; --ink:#1c2830; --muted:#5d6a6f; --line:#c6cdc6;
   --grid:#dfe3dd; --grid-major:#c9d0c8; --accent:#d4602a; --accent-ink:#fff; --sel:#1f6fb2;
-  --good:#2e7d4f; --field:#ffffff;
+  --good:#2e7d4f; --bad:#b8402c; --field:#ffffff; --hatch:#9aa59e;
   --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
   --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
@@ -23,727 +23,889 @@
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --paper:#11171a; --sheet:#182025; --ink:#e3e8e4; --muted:#93a0a3; --line:#2e3a3f;
   --grid:#1f292e; --grid-major:#2b373d; --accent:#ec7840; --accent-ink:#1a0e08; --sel:#5aa6e6;
-  --good:#5cc08a; --field:#10161a; color-scheme:dark}}
+  --good:#5cc08a; --bad:#ef7a64; --field:#10161a; --hatch:#56636a; color-scheme:dark}}
 :root[data-theme="dark"]{
   --paper:#11171a; --sheet:#182025; --ink:#e3e8e4; --muted:#93a0a3; --line:#2e3a3f;
   --grid:#1f292e; --grid-major:#2b373d; --accent:#ec7840; --accent-ink:#1a0e08; --sel:#5aa6e6;
-  --good:#5cc08a; --field:#10161a; color-scheme:dark}
+  --good:#5cc08a; --bad:#ef7a64; --field:#10161a; --hatch:#56636a; color-scheme:dark}
 *{box-sizing:border-box}
-html,body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px}
-body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--sheet)}
-.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--sheet);border-bottom:1px solid var(--line)}
-header .wrap{display:flex;align-items:center;gap:16px;padding-block:10px;flex-wrap:wrap}
-.brand{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:.02em;display:flex;align-items:center;gap:8px}
+html,body{height:100%;background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--sheet)}
+button{font:inherit;color:inherit}
+.app{height:100%;display:flex;flex-direction:column}
+.gut{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.top{background:var(--sheet);border-bottom:1px solid var(--line);flex:0 0 auto}
+.top .gut{display:flex;align-items:center;gap:10px;padding-block:8px;min-height:52px}
+.brand{font:700 22px var(--display);letter-spacing:.02em;display:flex;align-items:center;gap:8px}
 .brand svg{width:22px;height:22px}
-.brand small{font-family:var(--mono);font-weight:400;font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
-nav{display:flex;gap:4px;margin-left:auto}
-nav button{font:600 14px var(--display);letter-spacing:.08em;text-transform:uppercase;background:none;border:1px solid transparent;color:var(--muted);padding:6px 12px;border-radius:4px;cursor:pointer}
-nav button[aria-selected="true"]{color:var(--ink);border-color:var(--line);background:var(--paper)}
-main{padding-block:16px}
-.view[hidden]{display:none!important}
-.plan{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:16px;align-items:start}
-@media (max-width:880px){.plan{grid-template-columns:minmax(0,1fr)}}
-.board{background:var(--sheet);border:1px solid var(--line);border-radius:6px;overflow:hidden;min-width:0}
-.toolbar{display:flex;gap:6px;flex-wrap:wrap;padding:8px;border-bottom:1px solid var(--line);align-items:center}
-.btn{font:500 14px var(--body);background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:4px;padding:6px 10px;cursor:pointer;line-height:1.2}
+.ptitle{font:700 19px var(--display);letter-spacing:.02em;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn{font:500 15px var(--body);background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:9px 13px;cursor:pointer;line-height:1.15;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:42px}
 .btn:hover{border-color:var(--muted)}
-.btn[aria-pressed="true"]{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
 .btn.ghost{background:none}
-.btn.danger{color:#c0392b}
-.btn:focus-visible,input:focus-visible,select:focus-visible,nav button:focus-visible{outline:2px solid var(--sel);outline-offset:2px}
-.sep{width:1px;align-self:stretch;background:var(--line);margin:0 2px}
-.hint{font:12px var(--mono);color:var(--muted);margin-left:auto}
-svg#canvas{display:block;width:100%;height:min(68vh,640px);touch-action:none;cursor:default;background:var(--sheet);user-select:none}
-svg#canvas.drawing{cursor:crosshair}
-.statbar{display:flex;gap:20px;flex-wrap:wrap;padding:10px 12px;border-top:1px solid var(--line);font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums}
-.statbar b{font-weight:500;color:var(--ink)}
-.statbar span{color:var(--muted)}
-.editbar{border-bottom:1px solid var(--line);padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--paper)}
-.eb-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-#eb-name{flex:1 1 100px;font-weight:600}
-#eb-prod{flex:1 1 140px}
-.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.btn.danger{color:var(--bad)}
+.btn.sm{min-height:34px;padding:5px 10px;font-size:14px}
+.btn[aria-pressed="true"]{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn svg{width:18px;height:18px}
+:focus-visible{outline:2px solid var(--sel);outline-offset:2px}
+.ble{font:12px var(--mono);color:var(--muted)} .ble.on{color:var(--good)}
+.view{flex:1 1 auto;min-height:0;overflow:auto}
+.view[hidden]{display:none!important}
+/* Tab bar */
+.tabbar{flex:0 0 auto;display:grid;grid-template-columns:repeat(5,1fr);background:var(--sheet);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+.tabbar button{background:none;border:0;padding:7px 2px 6px;display:flex;flex-direction:column;align-items:center;gap:2px;font:600 11px var(--body);letter-spacing:.03em;color:var(--muted);cursor:pointer}
+.tabbar svg{width:22px;height:22px}
+.tabbar button[aria-selected="true"]{color:var(--accent)}
+/* Drawing */
+#v-draw{position:relative;overflow:hidden}
+#canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;user-select:none;-webkit-user-select:none;background:var(--sheet);display:block}
+.floattools{position:absolute;top:10px;left:max(10px,env(safe-area-inset-left,0px));display:flex;gap:6px;z-index:4}
+.floattools .btn{box-shadow:0 1px 3px rgb(0 0 0 / .12)}
+.fab{position:absolute;right:max(14px,env(safe-area-inset-right,0px));z-index:6;width:58px;height:58px;border-radius:50%;background:var(--accent);color:var(--accent-ink);border:0;font:400 34px/1 var(--body);box-shadow:0 3px 10px rgb(0 0 0 / .25);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:5;background:var(--sheet);border-top:1px solid var(--line);box-shadow:0 -4px 16px rgb(0 0 0 / .08);max-height:62%;overflow:auto;padding-block:10px 12px;display:flex;flex-direction:column;gap:9px}
+@media (min-width:900px){ .sheet{left:auto;top:0;width:380px;max-height:none;border-top:0;border-left:1px solid var(--line);box-shadow:none} #canvas{right:380px;width:auto} }
+.srow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.srow > *{min-width:0}
+.stitle{font:700 17px var(--display);letter-spacing:.05em;text-transform:uppercase;flex:1}
+.smsg{font-size:14px;color:var(--muted);line-height:1.4}
+.smsg.ok{color:var(--good)} .smsg.err{color:var(--bad)}
+.smsg b{color:var(--ink)}
+.stat{font:13px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.stat b{color:var(--ink);font-weight:600}
+.tools{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.tool{display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px;border:1px solid var(--line);border-radius:8px;background:var(--field);font:500 12px var(--body);cursor:pointer;color:var(--ink)}
+.tool svg{width:24px;height:24px}
+.tool.danger{color:var(--bad)}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
 .chip{font:500 13px var(--mono);border:1px solid var(--line);background:var(--field);color:var(--ink);border-radius:999px;padding:7px 11px;white-space:nowrap;cursor:pointer;font-variant-numeric:tabular-nums}
 .chip.need{border-color:var(--accent);color:var(--accent)}
 .chip.auto{color:var(--muted);border-style:dashed}
 .chip.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);border-style:solid}
-.eb-label{font:600 16px var(--display);letter-spacing:.04em;text-transform:uppercase;flex:1 1 100%}
-.eb-label span{font:400 13px var(--body);text-transform:none;letter-spacing:0;color:var(--muted)}
-.lenbox{display:flex;align-items:center;gap:4px;flex:1 1 64px;min-width:0}
-.lenbox input{font:500 22px var(--mono);height:48px;text-align:right}
-.lenbox span{font:13px var(--mono);color:var(--muted)}
-.btn.big{height:48px;padding:0 16px;font-size:16px}
-.eb-msg{font-size:14px;color:var(--muted);line-height:1.4}
-.eb-msg.ok{color:var(--good)} .eb-msg.err{color:#c0392b}
-.editbar.flash{box-shadow:inset 0 0 0 3px var(--good)}
-.ble-state{font:12px var(--mono);color:var(--muted)}
-.dirs{display:grid;grid-template-columns:repeat(4,42px);gap:4px;flex:0 0 auto}
-.dir{height:48px;font:600 22px var(--body);border:1px solid var(--line);background:var(--field);color:var(--ink);border-radius:6px;cursor:pointer}
-.dir.on{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
-.dirs.eight{grid-template-columns:repeat(3,42px)} .dirs.eight .dir{height:38px;font-size:18px}
-.warn{color:#b9541f;font-weight:500} .qwarn{margin:0;padding:10px 12px;border-radius:6px;border:1px solid #d9a07f;background:color-mix(in srgb,#d4602a 9%,transparent);font-size:14px;line-height:1.45}
-#eb-live{font:600 15px var(--mono);color:var(--accent);text-transform:none;letter-spacing:0}
-.btn:disabled{opacity:.45;cursor:default}
-.ble-state.on{color:var(--good)}
-@media (max-width:600px){.btn{padding:9px 12px} svg#canvas{height:56vh} .hint,#zin,#zout,.toolbar .sep{display:none} .brand small{display:none} .board{margin-inline:-6px}}
-@media (prefers-reduced-motion:no-preference){.editbar{transition:box-shadow .3s}}
-.rail{display:flex;flex-direction:column;gap:12px;min-width:0}
-.panel{background:var(--sheet);border:1px solid var(--line);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:10px}
-.panel h2{font:600 15px var(--display);letter-spacing:.1em;text-transform:uppercase;margin:0;color:var(--muted);display:flex;justify-content:space-between;align-items:baseline}
-.row{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
-label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);flex:1;min-width:0}
-input,select,textarea{font:15px var(--body);color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:4px;padding:6px 8px;width:100%;min-width:0}
-input[type=number]{font-family:var(--mono);font-size:14px}
-input[type=checkbox]{width:auto}
-.rooms{display:flex;flex-direction:column;gap:8px}
-.room{border:1px solid var(--line);border-left:5px solid var(--c);border-radius:4px;padding:8px;display:flex;flex-direction:column;gap:6px;background:var(--sheet)}
-.room.sel{border-color:var(--sel);border-left-color:var(--c);box-shadow:0 0 0 1px var(--sel)}
-.room .top{display:flex;gap:6px;align-items:center}
-.room .top input{font-weight:600}
-.room .meta{display:flex;justify-content:space-between;gap:8px;font:12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums;flex-wrap:wrap}
-.room .meta b{color:var(--ink);font-weight:500}
-.check{flex-direction:row;align-items:center;gap:6px;font-size:13px;color:var(--ink);flex:0 0 auto}
-.empty{font-size:14px;color:var(--muted);line-height:1.5}
-.products{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
-.prod{border-top:5px solid var(--c)}
-.prod .kind{font:11px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
-.quote{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
-@media (max-width:880px){.quote{grid-template-columns:minmax(0,1fr)}}
+input,select,textarea{font:16px var(--body);color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:8px;padding:9px 10px;width:100%;min-width:0}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);flex:1;min-width:120px}
+#rm-name{font-weight:600;flex:1 1 120px}
+#rm-prod{flex:1 1 150px}
+/* Keypad */
+.kp{display:flex;flex-direction:column;gap:6px}
+.kp-disp{display:flex;align-items:baseline;justify-content:space-between;gap:10px;border:2px solid var(--accent);border-radius:8px;padding:6px 12px;background:var(--field)}
+.kp-disp .lbl{font:600 12px var(--body);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.kp-disp .val{font:600 26px var(--mono);font-variant-numeric:tabular-nums}
+.kp-disp .val.ph{color:var(--muted);font-weight:400}
+.kp-fr{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.kp-keys{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.k{height:46px;border:1px solid var(--line);border-radius:8px;background:var(--field);font:500 20px var(--mono);cursor:pointer;color:var(--ink)}
+.kp-fr .k{height:40px;font:600 21px var(--body)}
+.k.on{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
+.k.set{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font:700 17px var(--body)}
+.k.fn{font:600 14px var(--body);color:var(--muted)}
+/* Menus & dialogs */
+.scrim{position:fixed;inset:0;background:rgb(10 16 20 / .35);z-index:40;display:flex;align-items:flex-end;justify-content:center}
+.menu{background:var(--sheet);width:100%;max-width:560px;border-radius:14px 14px 0 0;padding:14px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:10px;max-height:85%;overflow:auto}
+.menu h3{margin:0;font:700 18px var(--display);letter-spacing:.06em;text-transform:uppercase}
+.menu .group{font:600 12px var(--body);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
+.mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.mitem{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border:1px solid var(--line);border-radius:10px;background:var(--field);cursor:pointer;font:500 13px var(--body);text-align:center;color:var(--ink)}
+.mitem svg{width:30px;height:30px}
+.mitem:disabled{opacity:.4;cursor:default}
+/* Pages (home, products, worksheet, proposal, info) */
+.page{max-width:900px;margin:0 auto;padding-block:16px 28px;display:flex;flex-direction:column;gap:14px}
+.page h2{font:700 22px var(--display);letter-spacing:.03em;margin:0}
+.card{background:var(--sheet);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.card h3{margin:0;font:600 14px var(--display);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.plist{display:flex;flex-direction:column;gap:10px}
+.pcard{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;background:var(--sheet);border:1px solid var(--line);border-radius:10px;padding:12px 14px;cursor:pointer;text-align:left}
+.pcard .nm{font:700 19px var(--display);letter-spacing:.02em}
+.pcard .sub{font-size:13px;color:var(--muted)}
+.pcard .tot{font:600 15px var(--mono);text-align:right}
+.pcard .acts{grid-column:1/-1;display:flex;gap:6px;justify-content:flex-end}
 .tbl{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:560px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 th{font:600 12px var(--display);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px;border-bottom:2px solid var(--ink)}
 td{padding:8px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:top}
-td.n,th.n{text-align:right;font-family:var(--mono);font-size:13px}
+td.n,th.n{text-align:right;font-family:var(--mono);font-size:13px;white-space:nowrap}
 td .sub{display:block;font-size:12px;color:var(--muted)}
-.sw{display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--c);margin-right:6px;vertical-align:baseline}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;background:var(--c);margin-right:6px}
 .totals{display:flex;flex-direction:column;gap:6px;font-variant-numeric:tabular-nums}
 .totals div{display:flex;justify-content:space-between;font-family:var(--mono);font-size:14px}
-.totals .grand{border-top:2px solid var(--ink);padding-top:8px;margin-top:4px;font:700 26px var(--display);letter-spacing:.02em}
-.qhead{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline}
-.qhead h1{font:700 30px var(--display);margin:0;text-wrap:balance}
-.qhead .no{font:12px var(--mono);color:var(--muted)}
-.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--sheet);padding:10px 14px;border-radius:6px;display:flex;gap:12px;align-items:center;font-size:14px;z-index:20}
+.totals .grand{border-top:2px solid var(--ink);padding-top:8px;margin-top:4px;font:700 26px var(--display)}
+.warnbox{margin:0;padding:10px 12px;border-radius:8px;border:1px solid var(--accent);color:var(--ink);font-size:14px;line-height:1.45;background:var(--paper)}
+.prod{border-top:5px solid var(--c)}
+.kind{font:11px var(--mono);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.xrow{display:grid;grid-template-columns:minmax(0,2fr) repeat(3,minmax(64px,1fr)) auto;gap:6px;align-items:end}
+@media (max-width:560px){ .xrow{grid-template-columns:1fr 1fr 1fr} .xrow .nm{grid-column:1/-1} }
+.proposal{background:#fff;color:#1c2830;border:1px solid var(--line);border-radius:10px;padding:28px;display:flex;flex-direction:column;gap:16px}
+.proposal h1{font:700 30px var(--display);margin:0;letter-spacing:.02em}
+.proposal .meta{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:14px;line-height:1.5}
+.proposal th{color:#5d6a6f;border-bottom-color:#1c2830} .proposal td{border-bottom-color:#d5dad5}
+.proposal .terms{font-size:13px;line-height:1.5;color:#3d4a50;white-space:pre-wrap}
+.sig{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:20px;font-size:12px;color:#5d6a6f}
+.sig div{border-top:1px solid #1c2830;padding-top:4px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(80px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--sheet);padding:10px 14px;border-radius:8px;display:flex;gap:12px;align-items:center;font-size:14px;z-index:50;max-width:calc(100% - 32px)}
 .toast button{background:none;border:0;color:var(--accent);font:600 14px var(--body);cursor:pointer}
-@media (prefers-reduced-motion:no-preference){.room,.btn{transition:border-color .15s,box-shadow .15s}}
+@media (max-width:600px){ th.ml,td.ml{display:none} .proposal{padding:18px} }
+@media print{ body *{visibility:hidden} .proposal,.proposal *{visibility:visible} .proposal{position:absolute;inset:0;border:0} }
+@media (prefers-reduced-motion:no-preference){ .sheet{transition:box-shadow .2s} .sheet.flash{box-shadow:inset 0 0 0 3px var(--good)} }
 </style>
 
-<header><div class="wrap">
-  <div class="brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 12h9v9" stroke="var(--accent)"/></svg>Floorplot <small>takeoff &amp; quote</small></div>
-  <nav role="tablist">
-    <button role="tab" id="tab-plan" aria-selected="true" data-view="plan">Plan</button>
-    <button role="tab" id="tab-products" aria-selected="false" data-view="products">Products</button>
-    <button role="tab" id="tab-quote" aria-selected="false" data-view="quote">Quote</button>
+<div class="app" id="app">
+  <!-- HOME -->
+  <header class="top" id="home-top"><div class="gut">
+    <div class="brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 12h9v9" stroke="var(--accent)"/></svg>Floorplot</div>
+    <span style="flex:1"></span>
+    <button class="btn primary" id="new-proj">+ New project</button>
+  </div></header>
+  <main class="view" id="v-home"><div class="page gut">
+    <h2>Projects</h2>
+    <div class="plist" id="plist"></div>
+  </div></main>
+
+  <!-- PROJECT -->
+  <header class="top" id="proj-top" hidden><div class="gut">
+    <button class="btn ghost sm" id="to-home" aria-label="All projects">‹ Projects</button>
+    <div class="ptitle" id="ptitle"></div>
+    <span class="ble" id="ble-state"></span>
+    <button class="btn sm" id="ble-connect" hidden>Connect D2</button>
+    <button class="btn ghost sm" id="ble-disconnect" hidden>Disconnect</button>
+  </div></header>
+
+  <main class="view" id="v-draw" hidden>
+    <svg id="canvas" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet">
+      <defs>
+        <pattern id="g1" width="1" height="1" patternUnits="userSpaceOnUse"><path d="M1 0H0V1" fill="none" stroke="var(--grid)" stroke-width="0.04"/></pattern>
+        <pattern id="g5" width="5" height="5" patternUnits="userSpaceOnUse"><rect width="5" height="5" fill="url(#g1)"/><path d="M5 0H0V5" fill="none" stroke="var(--grid-major)" stroke-width="0.07"/></pattern>
+        <pattern id="hatch" width="0.6" height="0.6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0V0.6" stroke="var(--hatch)" stroke-width="0.12"/></pattern>
+      </defs>
+      <rect id="gridbg" fill="url(#g5)"/>
+      <g id="layer"></g>
+    </svg>
+    <div class="floattools">
+      <button class="btn sm" id="fit">Fit</button>
+      <button class="btn sm" id="undo-act" hidden>Undo</button>
+    </div>
+    <button class="fab" id="fab" aria-label="Add">+</button>
+    <section class="sheet gut" id="sheet" aria-live="polite"></section>
+  </main>
+
+  <main class="view" id="v-products" hidden><div class="page gut">
+    <div class="srow"><h2 style="flex:1">Products</h2><button class="btn" id="add-roll">+ Carpet (roll)</button><button class="btn" id="add-box">+ Boxed (LVP, tile, wood)</button></div>
+    <div class="products" id="products" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px"></div>
+  </div></main>
+
+  <main class="view" id="v-sheet" hidden><div class="page gut">
+    <div class="srow"><h2 style="flex:1">Worksheet</h2><button class="btn" id="add-stairs">+ Stairs</button><button class="btn" id="add-item">+ Line item</button></div>
+    <p class="warnbox" id="ws-warn" hidden></p>
+    <div class="card"><div class="tbl"><table>
+      <thead><tr><th>Item</th><th class="n">Qty</th><th class="n ml">Material</th><th class="n ml">Labor</th><th class="n">Total</th></tr></thead>
+      <tbody id="ws-body"></tbody></table></div></div>
+    <div class="card" id="extras-card"><h3>Stairs &amp; extra items</h3><div id="extras" style="display:flex;flex-direction:column;gap:10px"></div></div>
+    <div class="card"><div class="srow">
+      <label class="f">Markup (%)<input id="ws-markup" type="number" inputmode="decimal" step="1" min="0"></label>
+      <label class="f">Tax on materials (%)<input id="ws-tax" type="number" inputmode="decimal" step="0.025" min="0"></label>
+    </div><div class="totals" id="ws-totals"></div></div>
+  </div></main>
+
+  <main class="view" id="v-proposal" hidden><div class="page gut">
+    <div class="srow"><h2 style="flex:1">Proposal</h2><button class="btn" id="copy-prop">Copy as text</button><button class="btn primary" id="print-prop" hidden>Print / Save PDF</button></div>
+    <div class="proposal" id="proposal"></div>
+  </div></main>
+
+  <main class="view" id="v-info" hidden><div class="page gut">
+    <h2>Project info</h2>
+    <div class="card">
+      <div class="srow"><label class="f">Project name<input id="i-name"></label><label class="f">Customer<input id="i-customer"></label></div>
+      <div class="srow"><label class="f">Phone<input id="i-phone" inputmode="tel"></label><label class="f">Email<input id="i-email" inputmode="email"></label></div>
+      <label class="f">Job address<input id="i-address"></label>
+      <label class="f">Notes<textarea id="i-notes" rows="3"></textarea></label>
+    </div>
+    <h2>Your business</h2>
+    <div class="card">
+      <div class="srow"><label class="f">Business name<input id="s-biz"></label><label class="f">Phone<input id="s-phone" inputmode="tel"></label></div>
+      <div class="srow"><label class="f">Baseboard material ($/lf)<input id="s-bbp" type="number" inputmode="decimal" step="0.05"></label><label class="f">Baseboard labor ($/lf)<input id="s-bbl" type="number" inputmode="decimal" step="0.05"></label></div>
+      <div class="srow"><label class="f">Transition strip ($ each)<input id="s-trp" type="number" inputmode="decimal" step="0.5"></label><label class="f">Transition labor ($ each)<input id="s-trl" type="number" inputmode="decimal" step="0.5"></label></div>
+      <div class="srow"><label class="f">Default tax (%)<input id="s-tax" type="number" inputmode="decimal" step="0.025"></label><label class="f">Default markup (%)<input id="s-markup" type="number" inputmode="decimal" step="1"></label></div>
+      <label class="f">Proposal terms<textarea id="s-terms" rows="4"></textarea></label>
+    </div>
+  </div></main>
+
+  <nav class="tabbar" id="tabbar" role="tablist" hidden>
+    <button role="tab" data-tab="draw" id="t-draw"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z"/><path d="M4 13h8v7"/></svg>Drawing</button>
+    <button role="tab" data-tab="products" id="t-products"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="8" height="7" rx="1"/><rect x="13" y="4" width="8" height="7" rx="1"/><rect x="3" y="13" width="8" height="7" rx="1"/><rect x="13" y="13" width="8" height="7" rx="1"/></svg>Products</button>
+    <button role="tab" data-tab="sheet" id="t-sheet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3h14v18H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Worksheet</button>
+    <button role="tab" data-tab="proposal" id="t-proposal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 17l2 2 4-5"/></svg>Proposal</button>
+    <button role="tab" data-tab="info" id="t-info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Info</button>
   </nav>
-  <button class="btn ghost" id="new-job">New job</button>
-</div></header>
-
-<main class="wrap">
-  <!-- PLAN -->
-  <section class="view" id="view-plan">
-    <div class="plan">
-      <div class="board">
-        <div class="toolbar">
-          <button class="btn" id="ble-connect" hidden>Connect D2</button>
-          <button class="btn ghost" id="ble-disconnect" hidden>Disconnect</button>
-          <span id="ble-state" class="ble-state"></span>
-          <button class="btn primary" id="add-rect">+ Rectangle</button>
-          <button class="btn" id="add-l">+ L-shape</button>
-          <button class="btn" id="mode-draw" aria-pressed="false">Draw</button>
-          <button class="btn" id="mode-select" aria-pressed="true" hidden>Select</button>
-          <button class="btn ghost" id="undo-pt" hidden>Undo point</button>
-          <button class="btn ghost" id="finish" hidden>Close shape</button>
-          <button class="btn ghost" id="cancel" hidden>Cancel</button>
-          <span class="sep"></span>
-          <button class="btn ghost" id="zin" aria-label="Zoom in">+</button>
-          <button class="btn ghost" id="zout" aria-label="Zoom out">−</button>
-          <button class="btn ghost" id="fit">Fit</button>
-          <span class="hint" id="hint">Tap a wall to measure it</span>
-        </div>
-        <div class="editbar" id="editbar" aria-live="polite"></div>
-        <svg id="canvas" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <pattern id="g1" width="1" height="1" patternUnits="userSpaceOnUse"><path d="M1 0H0V1" fill="none" stroke="var(--grid)" stroke-width="0.04"/></pattern>
-            <pattern id="g5" width="5" height="5" patternUnits="userSpaceOnUse"><rect width="5" height="5" fill="url(#g1)"/><path d="M5 0H0V5" fill="none" stroke="var(--grid-major)" stroke-width="0.07"/></pattern>
-          </defs>
-          <rect id="gridbg" fill="url(#g5)"/>
-          <g id="layer"></g>
-        </svg>
-        <div class="statbar" id="statbar"></div>
-      </div>
-      <div class="rail">
-        <div class="panel">
-          <h2>Measuring</h2>
-          <p class="empty" style="margin:0;font-size:13px">Tap <b>Draw</b>, then drag your finger to aim and lift to drop each corner. Walls lock straight. With the D2 connected and no room selected, each shot draws the next wall.</p>
-          <label style="max-width:160px">Units<select id="m-unit"><option value="ft">feet &amp; inches</option><option value="m">meters</option></select></label>
-        </div>
-        <div class="panel">
-          <h2>Rooms <span id="room-count" style="font-family:var(--mono);font-size:12px;letter-spacing:0"></span></h2>
-          <div class="rooms" id="rooms"></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- PRODUCTS -->
-  <section class="view" id="view-products" hidden>
-    <div class="panel" style="margin-bottom:12px">
-      <h2>Catalog</h2>
-      <div class="row">
-        <label>Baseboard material ($/lf)<input id="bb-price" type="number" step="0.05" min="0"></label>
-        <label>Baseboard labor ($/lf)<input id="bb-labor" type="number" step="0.05" min="0"></label>
-        <button class="btn" id="add-roll">+ Roll good</button>
-        <button class="btn" id="add-box">+ Boxed good</button>
-      </div>
-    </div>
-    <div class="products" id="products"></div>
-  </section>
-
-  <!-- QUOTE -->
-  <section class="view" id="view-quote" hidden>
-    <div class="quote">
-      <div class="panel">
-        <div class="qhead"><h1 id="q-title">Flooring estimate</h1><span class="no" id="q-no"></span></div>
-        <p class="qwarn" id="q-warn" hidden></p>
-        <div class="tbl"><table>
-          <thead><tr><th>Item</th><th class="n">Qty</th><th class="n">Unit</th><th class="n">Material</th><th class="n">Labor</th><th class="n">Line total</th></tr></thead>
-          <tbody id="q-body"></tbody>
-        </table></div>
-      </div>
-      <div class="rail">
-        <div class="panel">
-          <h2>Job</h2>
-          <label>Customer<input id="j-customer"></label>
-          <label>Job address<input id="j-address"></label>
-          <div class="row">
-            <label>Tax on materials (%)<input id="j-tax" type="number" step="0.025" min="0"></label>
-            <label>Markup (%)<input id="j-markup" type="number" step="1" min="0"></label>
-          </div>
-        </div>
-        <div class="panel">
-          <h2>Totals</h2>
-          <div class="totals" id="q-totals"></div>
-          <button class="btn primary" id="copy-quote">Copy quote as text</button>
-          <button class="btn ghost" id="reset">Load sample job</button>
-        </div>
-      </div>
-    </div>
-  </section>
-</main>
-<div class="toast" id="toast" hidden><span id="toast-msg"></span><button id="toast-undo">Undo</button></div>
-<div class="toast" id="confirm" hidden><span>Start a new job? Rooms and customer info get cleared. Products and prices stay.</span><button id="cf-yes">Clear</button><button id="cf-no">Keep</button></div>
+</div>
+<div class="toast" id="toast" hidden><span id="toast-msg"></span><button id="toast-act" hidden></button></div>
+<div id="modal"></div>
 
 <script>
 (() => {
-const KEY = 'floorplot-v1';
-const SNAP = 0.5;
-const COLORS = ['#c0874a','#4f8f6b','#6d7fc4','#b65f7a','#3e9aa6','#a08a2e','#8a62b0','#c56a3a'];
-
-function sample(){
-  return {
-    job:{customer:'Sample: Rivera residence', address:'1420 Mesa Verde Dr', tax:7.75, markup:0, no:'FP-'+String(Date.now()).slice(-5)},
-    baseboard:{price:1.85, labor:1.6},
-    products:[
-      {id:'p1',name:'White oak engineered 5″',kind:'box',coverage:20,price:118,waste:8,labor:4.5,color:COLORS[0]},
-      {id:'p2',name:'Coastal oak LVP 7×48',kind:'box',coverage:23.64,price:62,waste:10,labor:2.25,color:COLORS[1]},
-      {id:'p3',name:'Plush carpet 12′ roll',kind:'roll',rollWidth:12,price:27,pad:6,waste:5,labor:0.95,color:COLORS[2]},
-      {id:'p4',name:'Porcelain tile 12×24',kind:'box',coverage:15.5,price:48,waste:15,labor:6.5,color:COLORS[3]},
-    ],
-    rooms:[
-      {id:'r1',name:'Living room',pts:[[0,0],[20,0],[20,16],[8,16],[8,12],[0,12]],productId:'p1',base:true},
-      {id:'r2',name:'Kitchen',pts:[[20,0],[32,0],[32,14],[20,14]],productId:'p2',base:true},
-      {id:'r3',name:'Primary bedroom',pts:[[20,14],[32,14],[32,27],[20,27]],productId:'p3',base:true},
-      {id:'r4',name:'Bath',pts:[[12,16],[20,16],[20,24],[12,24]],productId:'p4',base:false},
-    ]
-  };
-}
-let S;
-try{ S = JSON.parse(localStorage.getItem(KEY)) }catch(e){}
-if(!S || !S.rooms) S = sample();
-function normalize(){ S.rooms.forEach(r=>{ if(!Array.isArray(r.measured)) r.measured=r.pts.map(()=>true); }); }
-normalize();
-const save = () => { try{ localStorage.setItem(KEY, JSON.stringify(S)) }catch(e){} };
-
-let mode='select', draft=[], draftKeys=new Set(), aim=null, wallPicked=false, hover=null, selected=null, selWall=null, lastWall=null, pointers=new Map(), bleDev=null, view={x:-3,y:-3,w:42,h:34}, drag=null;
+'use strict';
 const $ = id => document.getElementById(id);
-const svg = $('canvas'), layer = $('layer');
-const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const uid = p => p + Math.random().toString(36).slice(2,8);
-const money = n => '$' + n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-const num = (n,d=1) => n.toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const esc = s => String(s??'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const uid = p => p + Math.random().toString(36).slice(2,9);
+const money = n => '$' + (n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const num = (n,d=1) => (n||0).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const clone = o => JSON.parse(JSON.stringify(o));
+const COLORS = ['#c0874a','#4f8f6b','#6d7fc4','#b65f7a','#3e9aa6','#a08a2e','#8a62b0','#c56a3a'];
+const ICON = {
+  rect:'<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="8" width="22" height="16"/><path d="M20 20l7 7" stroke="var(--accent)"/></svg>',
+  size:'<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="10" width="18" height="14"/><path d="M7 5h18M7 3v4M25 3v4" stroke="var(--accent)"/></svg>',
+  draw:'<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 26V8h12v8h10v10z"/><circle cx="5" cy="26" r="2.5" fill="var(--accent)" stroke="none"/><circle cx="17" cy="8" r="2.5" fill="var(--accent)" stroke="none"/></svg>',
+  L:'<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 5h22v11H16v11H5z"/></svg>',
+  T:'<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h24v9h-7v13h-10V14H4z"/></svg>',
+  U:'<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h9v12h6V5h9v22H4z"/></svg>',
+  hole:'<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="24" height="24"/><rect x="10" y="12" width="12" height="8" fill="url(#hatch)" stroke-dasharray="3 2"/></svg>',
+  door:'<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 26h7M21 26h7"/><path d="M11 26V12a10 10 0 0 1 10 10" stroke="var(--accent)"/></svg>',
+  stairs:'<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 27h6v-6h6v-6h6V9h6V5"/></svg>',
+  measure:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/></svg>',
+  rotate:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12a8 8 0 1 1-3-6.2"/><path d="M20 4v5h-5"/></svg>',
+  flip:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18" stroke-dasharray="2 2"/><path d="M9 7L3 17h6zM15 7l6 10h-6z"/></svg>',
+  copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="1"/><path d="M4 16V4h12"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
+  doorS:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20h5M16 20h5"/><path d="M8 20V9a8 8 0 0 1 8 8"/></svg>',
+  holeS:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18"/><rect x="8" y="9" width="8" height="6" stroke-dasharray="2 2"/></svg>',
+};
+
+// ================= data =================
+const KEY='floorplot-v2';
+function defaultProducts(){ return [
+  {id:'p1',name:'White oak engineered 5″',kind:'box',coverage:20,price:118,waste:8,labor:4.5,color:COLORS[0]},
+  {id:'p2',name:'Coastal oak LVP 7×48',kind:'box',coverage:23.64,price:62,waste:10,labor:2.25,color:COLORS[1]},
+  {id:'p3',name:'Plush carpet 12′ roll',kind:'roll',rollWidth:12,price:27,pad:6,waste:5,labor:0.95,color:COLORS[2]},
+  {id:'p4',name:'Porcelain tile 12×24',kind:'box',coverage:15.5,price:48,waste:15,labor:6.5,color:COLORS[3]},
+]; }
+function newProject(fields){ return Object.assign({id:uid('j'),name:'New project',customer:'',phone:'',email:'',address:'',notes:'',no:'FP-'+String(Date.now()).slice(-5),created:Date.now(),updated:Date.now(),
+  rooms:[],extras:[],tax:DB?DB.settings.tax:7.75,markup:DB?DB.settings.markup:0},fields||{}); }
+function sampleProject(){ const p=newProject({name:'Sample: Rivera residence',customer:'Maria Rivera',address:'1420 Mesa Verde Dr',tax:7.75,markup:0});
+  p.rooms=[
+    {id:'r1',name:'Living room',pts:[[0,0],[20,0],[20,16],[8,16],[8,12],[0,12]],productId:'p1',base:true,doors:[{wall:1,t:0.75,w:3,trans:true}],holes:[]},
+    {id:'r2',name:'Kitchen',pts:[[20,0],[32,0],[32,14],[20,14]],productId:'p2',base:true,doors:[],holes:[{x:24,y:5,w:5,h:3}]},
+    {id:'r3',name:'Primary bedroom',pts:[[20,14],[32,14],[32,27],[20,27]],productId:'p3',base:true,doors:[{wall:3,t:0.2,w:2.67,trans:true}],holes:[]},
+    {id:'r4',name:'Bath',pts:[[12,16],[20,16],[20,24],[12,24]],productId:'p4',base:false,doors:[{wall:0,t:0.5,w:2.5,trans:true}],holes:[]},
+  ];
+  p.extras=[{id:'x1',kind:'stairs',name:'Stairs (carpet wrap)',qty:13,unit:'step',price:12,labor:28}];
+  return p; }
+let DB=null;
+try{ DB=JSON.parse(localStorage.getItem(KEY)); }catch(e){}
+if(!DB||!Array.isArray(DB.projects)){
+  let old=null; try{ old=JSON.parse(localStorage.getItem('floorplot-v1')); }catch(e){}
+  DB={v:2,products:old&&old.products?old.products:defaultProducts(),settings:{biz:'',phone:'',bbPrice:old&&old.baseboard?old.baseboard.price:1.85,bbLabor:old&&old.baseboard?old.baseboard.labor:1.6,trPrice:18,trLabor:10,tax:7.75,markup:0,
+    terms:'Price includes materials, delivery and installation as listed. Furniture moving and subfloor repair are quoted separately if needed. Quote valid for 30 days. 50% deposit due at scheduling, balance on completion.'},projects:[],current:null};
+  DB.projects.push(sampleProject());
+  if(old&&old.rooms&&old.rooms.length){ const p=newProject({name:old.job&&old.job.customer?old.job.customer:'Saved job',customer:old.job?old.job.customer:'',address:old.job?old.job.address:'',tax:old.job?old.job.tax:7.75,markup:old.job?old.job.markup:0}); p.rooms=old.rooms; DB.projects.unshift(p); }
+}
+DB.projects.forEach(p=>p.rooms.forEach(normRoom));
+function normRoom(r){ if(!Array.isArray(r.measured)) r.measured=r.pts.map(()=>true); r.doors=r.doors||[]; r.holes=r.holes||[]; if(r.base==null) r.base=true; if(!r.seam) r.seam='auto'; return r; }
+const save = () => { const p=P(); if(p) p.updated=Date.now(); try{ localStorage.setItem(KEY, JSON.stringify(DB)); }catch(e){} };
+const P = () => DB.projects.find(p=>p.id===DB.current);
+const prod = id => DB.products.find(p=>p.id===id);
+
+// ================= geometry =================
+const r96 = v => Math.round(v*1536)/1536;
 const FR=['','⅛','¼','⅜','½','⅝','¾','⅞'];
 function fmtLen(ft){ let e=Math.round(ft*96); const f=Math.floor(e/96); e-=f*96; const i=Math.floor(e/8), fr=e%8; return f+'′'+(i||fr?' '+(i||'')+FR[fr]+'″':''); }
 const fmtIn = ft => { const e=Math.round(Math.abs(ft)*96); const i=Math.floor(e/8), fr=e%8; return (i||(fr?'':'0'))+FR[fr]+'″'; };
-
-// ---- geometry
 function area(p){ let a=0; for(let i=0;i<p.length;i++){const [x1,y1]=p[i],[x2,y2]=p[(i+1)%p.length]; a+=x1*y2-x2*y1;} return a/2; }
 function perim(p){ let s=0; for(let i=0;i<p.length;i++){const [x1,y1]=p[i],[x2,y2]=p[(i+1)%p.length]; s+=Math.hypot(x2-x1,y2-y1);} return s; }
 function bbox(p){ const xs=p.map(q=>q[0]), ys=p.map(q=>q[1]); return {x:Math.min(...xs),y:Math.min(...ys),w:Math.max(...xs)-Math.min(...xs),h:Math.max(...ys)-Math.min(...ys)}; }
 function centroid(p){ const A=area(p); if(Math.abs(A)<1e-6){const b=bbox(p);return [b.x+b.w/2,b.y+b.h/2];} let cx=0,cy=0; for(let i=0;i<p.length;i++){const [x1,y1]=p[i],[x2,y2]=p[(i+1)%p.length]; const f=x1*y2-x2*y1; cx+=(x1+x2)*f; cy+=(y1+y2)*f;} return [cx/(6*A),cy/(6*A)]; }
-const snap = v => Math.round(v/SNAP)*SNAP;
-const r96 = v => Math.round(v*1536)/1536; // keep corners to 1/128" so angled walls read back exactly
 function axisOf(p,i){ const a=p[i], b=p[(i+1)%p.length]; const dx=b[0]-a[0], dy=b[1]-a[1]; const L=Math.hypot(dx,dy); if(L<1e-9) return null;
   if(Math.abs(dy)<1e-6) return {ax:'x',s:Math.sign(dx),L}; if(Math.abs(dx)<1e-6) return {ax:'y',s:Math.sign(dy),L}; return {ax:'d',ux:dx/L,uy:dy/L,L}; }
 function needsMeasure(r,i){ if(r.measured[i]) return false; const a=axisOf(r.pts,i); if(!a) return false; if(a.ax==='d') return true;
   for(let j=0;j<r.pts.length;j++){ if(j===i||r.measured[j]) continue; const b=axisOf(r.pts,j); if(b&&b.ax===a.ax) return true; } return false; }
-function wallState(r,i){ return r.measured[i]?'done':needsMeasure(r,i)?'need':'auto'; }
+const wallState = (r,i) => r.measured[i]?'done':needsMeasure(r,i)?'need':'auto';
 function nextNeeded(r,from){ const n=r.pts.length; for(let k=1;k<=n;k++){ const j=((from+k)%n+n)%n; if(needsMeasure(r,j)) return j; } return null; }
+const needCount = r => { const c={x:0,y:0,d:0}; r.pts.forEach((_,i)=>{ const a=axisOf(r.pts,i); if(a&&!r.measured[i]) c[a.ax]++; }); return Math.max(0,c.x-1)+Math.max(0,c.y-1)+c.d; };
 function sideOf(r,i){ const a=axisOf(r.pts,i); if(!a||a.ax==='d') return 'angled'; const cw=area(r.pts)>0;
-  const m = a.ax==='x' ? (a.s>0?'top':'bottom') : (a.s>0?'right':'left'); if(cw) return m; return {top:'bottom',bottom:'top',left:'right',right:'left'}[m]; }
-// Set wall i to length L. Another wall on the same axis stretches to keep the room closed (an unmeasured one when possible).
+  const m = a.ax==='x' ? (a.s>0?'top':'bottom') : (a.s>0?'right':'left'); return cw?m:{top:'bottom',bottom:'top',left:'right',right:'left'}[m]; }
+// Set wall i to length L; walls on the same axis stretch to keep the room closed (unmeasured ones first).
 function setWall(r,i,L){
   const p=r.pts, n=p.length, w=axisOf(p,i); if(!w) return 'That wall has no length.';
-  const delta=L-w.L;
-  if(Math.abs(delta)<1/192){ r.measured[i]=true; return true; }
+  const delta=L-w.L; if(Math.abs(delta)<1/192){ r.measured[i]=true; return true; }
   const tx = w.ax==='x'?w.s*delta : w.ax==='y'?0 : w.ux*delta, ty = w.ax==='y'?w.s*delta : w.ax==='x'?0 : w.uy*delta;
-  const backup=p.map(q=>[...q]);
+  const backup=p.map(q=>[...q]), mbackup=[...r.measured];
   const shift=(ax,amt)=>{ if(Math.abs(amt)<1e-9) return true; const c=[];
-    for(let k=1;k<n;k++){ const j=(i+k)%n, a=axisOf(p,j); if(!a||a.ax!==ax) continue; const nv=a.s*a.L-amt; if(Math.sign(nv)!==a.s||Math.abs(nv)<0.05) continue; c.push({k,score:(r.measured[j]?2:0)+(Math.sign(amt)===-a.s?0:1)+k*0.001}); }
+    for(let k=1;k<n;k++){ const j=(i+k)%n, a=axisOf(r.pts,j); if(!a||a.ax!==ax) continue; const nv=a.s*a.L-amt; if(Math.sign(nv)!==a.s||Math.abs(nv)<0.05) continue; c.push({k,score:(r.measured[j]?2:0)+(Math.sign(amt)===-a.s?0:1)+k*0.001}); }
     if(!c.length) return false; c.sort((a,b)=>a.score-b.score); const k=c[0].k; r.measured[(i+k)%n]=false;
-    for(let m=1;m<=k;m++){ const v=(i+m)%n; p[v]=[r96(p[v][0]+(ax==='x'?amt:0)), r96(p[v][1]+(ax==='y'?amt:0))]; } return true; };
-  if(!shift('x',tx) || !shift('y',ty)){ r.pts=backup; return `A ${fmtLen(L)} wall won't fit this shape. Check the reading, or drag the corners first.`; }
+    for(let m=1;m<=k;m++){ const v=(i+m)%n; r.pts[v]=[r96(r.pts[v][0]+(ax==='x'?amt:0)), r96(r.pts[v][1]+(ax==='y'?amt:0))]; } return true; };
+  if(!shift('x',tx) || !shift('y',ty)){ r.pts=backup; r.measured=mbackup; return `A ${fmtLen(L)} wall won't fit this shape. Check the reading, or drag the corners first.`; }
   r.measured[i]=true; return true; }
-function toWorld(e){ const pt=svg.createSVGPoint(); pt.x=e.clientX; pt.y=e.clientY; const w=pt.matrixTransform(svg.getScreenCTM().inverse()); return [w.x,w.y]; }
-
-// ---- estimating
-const prod = id => S.products.find(p=>p.id===id);
-function estimate(room){
-  const p = prod(room.productId); const A = Math.abs(area(room.pts)), P = perim(room.pts);
-  const r = {area:A, perim:P, p};
-  if(!p) return r;
-  const w = 1 + p.waste/100;
-  if(p.kind==='roll'){
-    const b = bbox(room.pts); const run=Math.max(b.w,b.h), across=Math.min(b.w,b.h);
-    const drops = Math.ceil(across/p.rollWidth - 1e-9);
-    const lf = drops*run*w;
-    r.qty = Math.ceil(lf*p.rollWidth/9*10)/10; r.unit='sy';
-    r.detail = `${drops} drop${drops>1?'s':''} × ${fmtLen(run)} · ${num(lf,1)} lf off roll`;
-    r.mat = r.qty*(p.price+(p.pad||0));
-  } else {
-    r.qty = Math.ceil(A*w/p.coverage - 1e-9); r.unit='box';
-    r.detail = `${num(r.qty*p.coverage,1)} sq ft delivered`;
-    r.mat = r.qty*p.price;
-  }
-  r.lab = A*p.labor;
-  return r;
-}
-function quote(){
-  const by = new Map(); let baseLf=0;
-  for(const room of S.rooms){
-    const e = estimate(room);
-    if(room.base) baseLf += e.perim;
-    if(!e.p) continue;
-    const g = by.get(e.p.id) || {p:e.p, area:0, qty:0, mat:0, lab:0, rooms:[]};
-    g.area+=e.area; g.qty+=e.qty; g.mat+=e.mat; g.lab+=e.lab; g.rooms.push(room.name); by.set(e.p.id,g);
-  }
-  const lines=[...by.values()];
-  const bbPieces = Math.ceil(baseLf*1.1/8);
-  const bb = {lf:baseLf, pieces:bbPieces, mat:bbPieces*8*S.baseboard.price, lab:baseLf*S.baseboard.labor};
-  let mat=lines.reduce((s,l)=>s+l.mat,0)+bb.mat, lab=lines.reduce((s,l)=>s+l.lab,0)+bb.lab;
-  const mk = 1+(+S.job.markup||0)/100;
-  mat*=mk; lab*=mk;
-  const tax = mat*(+S.job.tax||0)/100;
-  return {lines, bb, mat, lab, tax, total:mat+lab+tax, mk};
-}
-
-// ---- canvas render
-function render(){
-  svg.setAttribute('viewBox',`${view.x} ${view.y} ${view.w} ${view.h}`);
-  const g=$('gridbg'); const pad=200; g.setAttribute('x',Math.floor(view.x/5)*5-pad); g.setAttribute('y',Math.floor(view.y/5)*5-pad); g.setAttribute('width',view.w+pad*2); g.setAttribute('height',view.h+pad*2);
-  const fs = view.w/(svg.clientWidth||700)*14;
-  let h='';
-  for(const r of S.rooms){
-    const p=prod(r.productId); const c=p?p.color:'#888'; const sel=r.id===selected;
-    const d=r.pts.map(q=>q.join(',')).join(' ');
-    h+=`<polygon data-room="${r.id}" points="${d}" fill="${c}" fill-opacity="${sel?0.42:0.26}" stroke="${sel?'var(--sel)':'var(--ink)'}" stroke-width="${sel?0.14:0.09}" stroke-linejoin="round" style="cursor:${mode==='select'?'move':'crosshair'}"/>`;
-  }
-  for(const r of S.rooms){
-    const sgn = area(r.pts)>0?1:-1;
-    for(let i=0;i<r.pts.length;i++){
-      const [x1,y1]=r.pts[i],[x2,y2]=r.pts[(i+1)%r.pts.length]; const L=Math.hypot(x2-x1,y2-y1); if(L<1.5) continue;
-      const nx=(y2-y1)/L*sgn*-1, ny=-(x2-x1)/L*sgn*-1; const off=fs*0.9;
-      const mx=(x1+x2)/2 - nx*off, my=(y1+y2)/2 - ny*off;
-      let ang=Math.atan2(y2-y1,x2-x1)*180/Math.PI; if(ang>90||ang<-90) ang+=180;
-      const isSel=r.id===selected&&i===selWall&&mode==='select'; const st=r.measured[i]?'var(--ink)':'var(--muted)';
-      h+=`<text x="${mx}" y="${my}" transform="rotate(${ang} ${mx} ${my})" text-anchor="middle" dominant-baseline="middle" font-family="JetBrains Mono,monospace" font-size="${fs*(isSel?0.95:0.8)}" font-weight="${isSel?600:400}" fill="${isSel?'var(--accent)':st}" pointer-events="none" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.12}">${fmtLen(L)}</text>`;
-    }
-    const [cx,cy]=centroid(r.pts); const e=estimate(r);
-    h+=`<text x="${cx}" y="${cy-fs*0.35}" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="700" font-size="${fs*1.15}" fill="var(--ink)" pointer-events="none" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.18}">${esc(r.name)}</text>`;
-    h+=`<text x="${cx}" y="${cy+fs*0.9}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="${fs*0.8}" fill="var(--ink)" pointer-events="none" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.15}">${num(e.area,1)} sq ft</text>`;
-  }
-  if(mode==='select') for(const r of S.rooms) r.pts.forEach((a,i)=>{ const b=r.pts[(i+1)%r.pts.length]; const isSel=r.id===selected&&i===selWall;
-    if(isSel) h+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="var(--accent)" stroke-width="${fs*0.28}" stroke-linecap="round" pointer-events="none"/>`;
-    h+=`<line data-room="${r.id}" data-wall="${i}" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="transparent" stroke-width="${fs*1.9}" stroke-linecap="round" pointer-events="stroke" style="cursor:pointer"/>`; });
-  const sr=S.rooms.find(r=>r.id===selected);
-  if(sr && mode==='select') sr.pts.forEach((q,i)=>{ h+=`<circle data-vi="${i}" cx="${q[0]}" cy="${q[1]}" r="${fs*0.42}" fill="var(--sheet)" stroke="var(--sel)" stroke-width="${fs*0.12}" style="cursor:grab"/>`; });
-  if(sr && mode==='select') sr.pts.forEach((q,i)=>{ h+=`<circle data-vi="${i}" cx="${q[0]}" cy="${q[1]}" r="${fs*1.1}" fill="transparent" style="cursor:grab"/>`; });
-  if(mode==='draw'){
-    const lw=fs*0.07;
-    if(hover){ h+=`<line x1="${view.x}" y1="${hover[1]}" x2="${view.x+view.w}" y2="${hover[1]}" stroke="var(--accent)" stroke-opacity=".45" stroke-width="${lw}" pointer-events="none"/><line x1="${hover[0]}" y1="${view.y}" x2="${hover[0]}" y2="${view.y+view.h}" stroke="var(--accent)" stroke-opacity=".45" stroke-width="${lw}" pointer-events="none"/>`;
-      if(aim&&aim.guideX!=null) h+=`<line x1="${aim.guideX}" y1="${view.y}" x2="${aim.guideX}" y2="${view.y+view.h}" stroke="var(--sel)" stroke-width="${lw*1.6}" stroke-dasharray="${fs*0.4} ${fs*0.25}" pointer-events="none"/>`;
-      if(aim&&aim.guideY!=null) h+=`<line x1="${view.x}" y1="${aim.guideY}" x2="${view.x+view.w}" y2="${aim.guideY}" stroke="var(--sel)" stroke-width="${lw*1.6}" stroke-dasharray="${fs*0.4} ${fs*0.25}" pointer-events="none"/>`; }
-    const pts = hover&&!(aim&&aim.close) ? [...draft,hover] : aim&&aim.close ? [...draft,draft[0]] : draft;
-    if(pts.length>1) h+=`<polyline points="${pts.map(q=>q.join(',')).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="${fs*0.16}" stroke-linejoin="miter" stroke-linecap="square" pointer-events="none"/>`;
-    for(let i=1;i<pts.length;i++){ const [x1,y1]=pts[i-1],[x2,y2]=pts[i]; const L=Math.hypot(x2-x1,y2-y1); if(L<0.25) continue; const live=i===pts.length-1&&hover;
-      const vert=Math.abs(x2-x1)<1e-6; const tx=(x1+x2)/2+(vert?fs*1.1:0), ty=(y1+y2)/2-(vert?0:fs*0.7);
-      h+=`<text x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="middle" font-family="JetBrains Mono,monospace" font-size="${fs*(live?1.15:0.85)}" font-weight="${live?700:500}" fill="var(--accent)" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.2}" pointer-events="none">${fmtLen(L)}</text>`; }
-    draft.forEach((q,i)=>{ const first=i===0&&draft.length>=3; h+=`<circle cx="${q[0]}" cy="${q[1]}" r="${fs*(first?0.55:0.32)}" fill="${i===0?'var(--accent)':'var(--sheet)'}" stroke="var(--accent)" stroke-width="${fs*0.12}" pointer-events="none"/>`;
-      if(first&&aim&&aim.close) h+=`<circle cx="${q[0]}" cy="${q[1]}" r="${fs*1.1}" fill="none" stroke="var(--good)" stroke-width="${fs*0.15}" pointer-events="none"/>`; });
-    if(hover&&!(aim&&aim.close)) h+=`<circle cx="${hover[0]}" cy="${hover[1]}" r="${fs*0.4}" fill="var(--accent)" stroke="var(--sheet)" stroke-width="${fs*0.1}" pointer-events="none"/>`;
-  }
-  layer.innerHTML=h;
-  const q=quote(); const tot=S.rooms.reduce((s,r)=>s+Math.abs(area(r.pts)),0);
-  $('statbar').innerHTML=`<span>Rooms <b>${S.rooms.length}</b></span><span>Floor area <b>${num(tot,1)} sq ft</b></span><span>Baseboard <b>${num(q.bb.lf,1)} lf</b></span><span>Est. total <b>${money(q.total)}</b></span>`;
-}
-
-// ---- side panels
-// How many more readings the room needs: on each axis one unmeasured wall can be worked out from the others; angled walls always need a reading.
-const needCount = r => { const c={x:0,y:0,d:0}; r.pts.forEach((_,i)=>{ const a=axisOf(r.pts,i); if(a&&!r.measured[i]) c[a.ax]++; }); return Math.max(0,c.x-1)+Math.max(0,c.y-1)+c.d; };
-function renderRooms(){
-  $('room-count').textContent = S.rooms.length ? S.rooms.length+' total' : '';
-  if(!S.rooms.length){ $('rooms').innerHTML='<p class="empty">No rooms yet. Tap <b>Draw room</b> and click corners on the grid, or add a quick rectangle above.</p>'; return; }
-  const opts = productOptions;
-  $('rooms').innerHTML = S.rooms.map(r=>{ const e=estimate(r); const c=e.p?e.p.color:'#888';
-    return `<div class="room${r.id===selected?' sel':''}" style="--c:${c}" data-id="${r.id}">
-      <div class="top"><input id="rn-${r.id}" data-f="name" value="${esc(r.name)}" aria-label="Room name"><button class="btn ghost danger" data-del="${r.id}" aria-label="Delete ${esc(r.name)}">✕</button></div>
-      <select id="rp-${r.id}" data-f="productId" aria-label="Flooring">${opts(r.productId)}</select>
-      ${needCount(r)?`<div class="meta"><span class="warn">⚠ ${needCount(r)} wall${needCount(r)>1?'s':''} not measured · size is a sketch</span></div>`:''}${r.gap>1/12?`<div class="meta"><span class="warn">⚠ closed with a ${fmtIn(r.gap)} gap</span></div>`:''}
-      <div class="meta"><span><b>${num(e.area,1)}</b> sq ft · <b>${num(e.perim,1)}</b> lf</span><span>${e.p?`<b>${e.unit==='sy'?num(e.qty,1):e.qty}</b> ${e.unit==='sy'?'sq yd':(e.qty===1?'box':'boxes')}`:''}</span></div>
-      ${e.p?`<div class="meta"><span>${e.detail}</span></div>`:''}
-      <label class="check"><input type="checkbox" id="rb-${r.id}" data-f="base"${r.base?' checked':''}> Baseboard</label>
-    </div>`; }).join('');
-}
-function productOptions(id){ return '<option value="">— No flooring —</option>'+S.products.map(p=>`<option value="${p.id}"${p.id===id?' selected':''}>${esc(p.name)}</option>`).join(''); }
-const selRoom = () => S.rooms.find(r=>r.id===selected);
-function renderEdit(msg,cls){
-  const eb=$('editbar'); const r=selRoom();
-  if(mode==='draw'){ const n=draft.length, metric=$('m-unit').value==='m';
-    const help = n ? 'Drag to aim, lift to drop the next corner. Or pick a direction, then shoot the D2 or type a length.' : 'Tap where the room starts, or pick a direction and shoot the first wall with the D2.';
-    eb.innerHTML=`<div class="eb-row"><span class="eb-label">${n?`Drawing · ${n-1} wall${n-1===1?'':'s'}`:'Draw a room'} <span id="eb-live"></span></span></div>
-    <div class="eb-row"><div class="dirs${ang45?' eight':''}" role="group" aria-label="Next wall direction">${(ang45?[5,6,7,4,-1,0,3,2,1]:[6,4,0,2]).map(d=>d<0?'<span></span>':`<button class="dir${d===heading?' on':''}" data-dir="${d}" aria-label="Next wall ${DIRS[d][2]}">${DIRS[d][3]}</button>`).join('')}</div>
-      <button class="btn big" id="eb-ang" aria-pressed="${ang45}" title="Allow 45° walls">45°</button>
-      ${metric?'<div class="lenbox"><input id="eb-ft" inputmode="decimal" autocomplete="off" aria-label="Length in meters"><span>m</span></div>':'<div class="lenbox"><input id="eb-ft" inputmode="decimal" autocomplete="off" aria-label="Feet"><span>ft</span></div><div class="lenbox"><input id="eb-in" inputmode="decimal" autocomplete="off" aria-label="Inches"><span>in</span></div>'}
-      <button class="btn primary big" id="eb-add">Add wall</button></div>
-    <div class="eb-row"><button class="btn big" id="eb-dundo"${n?'':' disabled'}>Undo</button><button class="btn primary big" id="eb-close"${n>=3?'':' disabled'}>Close room</button><button class="btn ghost big" id="eb-dcancel">Cancel</button></div>
-    <div class="eb-msg ${cls||''}">${esc(msg||help)}</div>`; return; }
-  if(!r){ eb.innerHTML=`<div class="eb-msg ${cls||''}">${msg?esc(msg):S.rooms.length?'Tap a room to measure its walls, or add another room.':'Start with <b>+ Rectangle</b> or <b>+ L-shape</b>, then shoot each wall with your D2.'}</div>`; return; }
-  const n=r.pts.length; if(selWall==null||selWall>=n) selWall=nextNeeded(r,-1)??0;
-  const chips=r.pts.map((_,i)=>{ const a=axisOf(r.pts,i), st=wallState(r,i); return `<button class="chip ${st}${i===selWall?' on':''}" data-chip="${i}" id="chip-${i}" title="${st==='done'?'Measured':st==='need'?'Needs measuring':'Set by the other walls'}">${st==='done'?'✓ ':''}${i+1} · ${fmtLen(a?a.L:0)}</button>`; }).join('');
-  const a=axisOf(r.pts,selWall), st=wallState(r,selWall), L=a?a.L:0;
-  const stTxt= st==='done'?'measured':st==='need'?'needs measuring':'set by the other walls';
-  const complete=nextNeeded(r,-1)==null;
-  if(!msg){ const nc=needCount(r); msg= complete?`All walls measured · ${num(Math.abs(area(r.pts)),1)} sq ft`+(r.gap>1/12?` · closed with a ${fmtIn(r.gap)} gap`:''):`${nc} wall${nc>1?'s':''} left to measure. Shoot the ${sideOf(r,selWall)} wall with the D2, or type its length and tap Set.`; cls=complete?(r.gap>1/12?'err':'ok'):''; }
-  const metric=$('m-unit').value==='m'; const ft=Math.floor(L+1e-9), inch=Math.round((L-ft)*12*8)/8;
-  eb.innerHTML=`<div class="eb-row"><input id="eb-name" value="${esc(r.name)}" aria-label="Room name"><select id="eb-prod" aria-label="Flooring">${productOptions(r.productId)}</select><button class="btn ghost danger" id="eb-del" aria-label="Delete room" title="Delete room">✕</button></div>
-    <div class="chips" role="group" aria-label="Walls">${chips}</div>
-    <div class="eb-row"><span class="eb-label">Wall ${selWall+1} of ${n} · ${sideOf(r,selWall)} <span>${stTxt}</span></span>
-      ${metric?`<div class="lenbox"><input id="eb-ft" inputmode="decimal" autocomplete="off" placeholder="${num(L/3.28084,3)}" aria-label="Length in meters"><span>m</span></div>`
-      :`<div class="lenbox"><input id="eb-ft" inputmode="decimal" autocomplete="off" placeholder="${ft}" aria-label="Feet"><span>ft</span></div><div class="lenbox"><input id="eb-in" inputmode="decimal" autocomplete="off" placeholder="${inch}" aria-label="Inches"><span>in</span></div>`}
-      <button class="btn primary big" id="eb-set">Set</button>${lastWall&&lastWall.id===r.id?'<button class="btn ghost big" id="eb-undo">Undo</button>':''}</div>
-    <div class="eb-msg ${cls||''}">${esc(msg)}</div>`;
-}
-function selectRoom(id,wall){ selected=id; wallPicked = wall!=null; const r=selRoom(); selWall = r ? (wall!=null?wall:(nextNeeded(r,-1)??0)) : null; render(); renderRooms(); renderEdit(); }
-function applyWall(L){
-  const r=selRoom(); if(!r) return; const i=selWall;
-  const snap0={id:r.id,pts:r.pts.map(q=>[...q]),measured:[...r.measured],wall:i};
-  const res=setWall(r,i,L); if(res!==true){ renderEdit(res,'err'); return; }
-  lastWall=snap0; save(); const nx=nextNeeded(r,i); let msg, cls='';
-  if(nx==null){ wallPicked=false; msg=`${r.name} is done · ${num(Math.abs(area(r.pts)),1)} sq ft. Pick its flooring above, then add the next room.`; cls='ok'; }
-  else { selWall=nx; msg=`Wall ${i+1} set to ${fmtLen(L)}. Next: the ${sideOf(r,nx)} wall.`; }
-  render(); renderRooms(); renderEdit(msg,cls);
-  const eb=$('editbar'); eb.classList.add('flash'); setTimeout(()=>eb.classList.remove('flash'),350); }
-function readEditLen(){ const f=$('eb-ft'), i=$('eb-in'); const u=$('m-unit').value; const fv=f.value.trim(), iv=i?i.value.trim():'';
-  if(!fv&&!iv) return NaN; let L = fv? parseLen(fv,u) : 0; if(iv){ const x=parseFloat(iv.replace(',','.')); if(isNaN(x)) return NaN; L+=x/12; } return L; }
-function addTemplate(kind){
-  if(mode==='draw') setMode('select');
-  const all=S.rooms.flatMap(r=>r.pts); const x0=all.length?snap(Math.max(...all.map(p=>p[0]))+2):0, y0=all.length?snap(Math.min(...all.map(p=>p[1]))):0;
-  const shape= kind==='L'? [[0,0],[16,0],[16,8],[10,8],[10,14],[0,14]] : [[0,0],[12,0],[12,10],[0,10]];
-  const id=uid('r'); S.rooms.push({id,name:'Room '+(S.rooms.length+1),pts:shape.map(([x,y])=>[x0+x,y0+y]),productId:S.products[0]?.id||'',base:true,measured:shape.map(()=>false)});
-  lastWall=null; save(); selectRoom(id,0); fit(); }
-function renderProducts(){
-  $('bb-price').value=S.baseboard.price; $('bb-labor').value=S.baseboard.labor;
-  $('products').innerHTML = S.products.map(p=>{ const used=S.rooms.filter(r=>r.productId===p.id).length;
-    const f=(k,l,step)=>`<label>${l}<input type="number" step="${step}" min="0" id="pf-${p.id}-${k}" data-pid="${p.id}" data-k="${k}" value="${p[k]??0}"></label>`;
-    return `<div class="panel prod" style="--c:${p.color}">
-      <div class="row" style="justify-content:space-between;align-items:center"><span class="kind">${p.kind==='roll'?'Roll good · priced per sq yd':'Boxed good · priced per box'}</span><span class="kind">${used} room${used===1?'':'s'}</span></div>
-      <label>Product name<input id="pf-${p.id}-name" data-pid="${p.id}" data-k="name" value="${esc(p.name)}"></label>
-      <div class="row">${p.kind==='roll'? f('rollWidth','Roll width (ft)',0.5)+f('price','Material $/sy',0.25)+f('pad','Pad $/sy',0.25) : f('coverage','Sq ft per box',0.01)+f('price','$ per box',0.5)}</div>
-      <div class="row">${f('waste','Waste %',1)}${f('labor','Labor $/sq ft',0.05)}<label style="flex:0 0 52px">Color<input type="color" id="pf-${p.id}-color" data-pid="${p.id}" data-k="color" value="${p.color}" style="padding:2px;height:34px"></label></div>
-      <button class="btn ghost danger" data-pdel="${p.id}" ${used?'disabled title="Unassign it from rooms first"':''}>${used?'In use':'Remove product'}</button>
-    </div>`; }).join('');
-}
-function renderQuote(){
-  const q=quote(); const j=S.job;
-  $('j-customer').value=j.customer; $('j-address').value=j.address; $('j-tax').value=j.tax; $('j-markup').value=j.markup;
-  $('q-title').textContent = j.customer ? 'Estimate for '+j.customer : 'Flooring estimate';
-  $('q-no').textContent = j.no + (j.address?' · '+j.address:'');
-  const rough=S.rooms.filter(r=>needCount(r)), gappy=S.rooms.filter(r=>r.gap>1/12), noFloor=S.rooms.filter(r=>!prod(r.productId));
-  const notes=[]; if(rough.length) notes.push(`${rough.map(r=>r.name).join(', ')} ${rough.length>1?'have':'has'} walls that weren't measured, so ${rough.length>1?'those sizes are':'that size is'} only a sketch.`);
-  if(gappy.length) notes.push(`${gappy.map(r=>`${r.name} (${fmtIn(r.gap)})`).join(', ')} closed with a gap. Reshoot if that seems high.`);
-  if(noFloor.length) notes.push(`${noFloor.map(r=>r.name).join(', ')} ${noFloor.length>1?'have':'has'} no flooring picked and ${noFloor.length>1?'aren\'t':'isn\'t'} in this quote.`);
-  $('q-warn').hidden=!notes.length; $('q-warn').textContent = notes.length ? 'Before you send this: '+notes.join(' ') : '';
-  let h = q.lines.map(l=>{ const p=l.p; const unit=p.kind==='roll'?'sq yd':'box';
-    const sub = p.kind==='roll'? `${money(p.price)}/sy + ${money(p.pad||0)} pad · ${num(l.area,1)} sq ft` : `${money(p.price)}/box · ${num(l.area,1)} sq ft at ${p.waste}% waste`;
-    return `<tr><td><span class="sw" style="--c:${p.color}"></span>${esc(p.name)}<span class="sub">${esc(l.rooms.join(', '))} · ${sub}</span></td><td class="n">${p.kind==='roll'?num(l.qty,1):l.qty}</td><td class="n">${unit}</td><td class="n">${money(l.mat*q.mk)}</td><td class="n">${money(l.lab*q.mk)}</td><td class="n">${money((l.mat+l.lab)*q.mk)}</td></tr>`; }).join('');
-  if(q.bb.lf>0) h+=`<tr><td>Baseboard &amp; install<span class="sub">${num(q.bb.lf,1)} lf measured · ${q.bb.pieces} × 8′ pieces at 10% waste</span></td><td class="n">${q.bb.pieces}</td><td class="n">8′ pc</td><td class="n">${money(q.bb.mat*q.mk)}</td><td class="n">${money(q.bb.lab*q.mk)}</td><td class="n">${money((q.bb.mat+q.bb.lab)*q.mk)}</td></tr>`;
-  if(!h) h='<tr><td colspan="6" class="empty">Assign flooring to rooms on the Plan tab to build line items.</td></tr>';
-  $('q-body').innerHTML=h;
-  $('q-totals').innerHTML=`<div><span>Materials</span><span>${money(q.mat)}</span></div><div><span>Labor</span><span>${money(q.lab)}</span></div><div><span>Tax (${+j.tax||0}%)</span><span>${money(q.tax)}</span></div><div class="grand"><span>Total</span><span>${money(q.total)}</span></div>`;
-}
-function all(){ render(); renderRooms(); renderEdit(); }
-
-// ---- interactions
-function setMode(m){ mode=m; draft=[]; draftKeys=new Set(); hover=null; aim=null; heading=0; $('mode-select').setAttribute('aria-pressed',m==='select'); $('mode-draw').setAttribute('aria-pressed',m==='draw');
-  svg.classList.toggle('drawing',m==='draw');
-  ['add-rect','add-l','mode-draw'].forEach(id=>$(id).hidden=m==='draw');
-  $('hint').textContent = m==='draw' ? 'Drag to aim · lift to drop a corner · two fingers to zoom' : 'Tap a wall to measure it · drag a wall to move it'; render(); renderEdit(); }
-const gridStep = () => view.w<14 ? 1/12 : view.w<45 ? 0.5 : 1;
-const segKey = (a,b) => [a,b].map(q=>r96(q[0])+','+r96(q[1])).sort().join('|');
-const dirOf = (a,b) => ((Math.round(Math.atan2(b[1]-a[1],b[0]-a[0])/(Math.PI/4))%8)+8)%8;
-// Where a finger at `raw` puts the next corner: walls lock horizontal/vertical, lengths snap to the grid, and corners line up with nearby corners.
-function drawSnap(raw){
-  const px=view.w/(svg.clientWidth||700), tol=24*px, g=gridStep(), last=draft[draft.length-1];
-  const cands=draft.concat(S.rooms.flatMap(r=>r.pts));
-  if(draft.length>=3 && Math.hypot(raw[0]-draft[0][0],raw[1]-draft[0][1])<tol*1.5) return {pt:[...draft[0]],close:true};
-  if(!last){ let best=null,bd=tol; for(const c of cands){ const d=Math.hypot(raw[0]-c[0],raw[1]-c[1]); if(d<bd){bd=d;best=c;} }
-    return {pt: best?[...best]:[r96(Math.round(raw[0]/g)*g), r96(Math.round(raw[1]/g)*g)]}; }
-  const dx=raw[0]-last[0], dy=raw[1]-last[1], di=dirOf(last,raw);
-  if(ang45 && di%2===1){ const u=DIRS[di]; const len=Math.max(0,Math.round((dx*u[0]+dy*u[1])/g)*g); return {pt:[r96(last[0]+u[0]*len), r96(last[1]+u[1]*len)]}; }
-  if(ang45 ? (di===0||di===4) : Math.abs(dx)>=Math.abs(dy)){ let x=last[0]+Math.round(dx/g)*g, gx=null, bd=tol;
-    for(const c of cands){ if(c===last) continue; const d=Math.abs(raw[0]-c[0]); if(d<bd){bd=d;x=c[0];gx=c[0];} }
-    return {pt:[r96(x),last[1]],guideX:gx}; }
-  let y=last[1]+Math.round(dy/g)*g, gy=null, bd=tol;
-  for(const c of cands){ if(c===last) continue; const d=Math.abs(raw[1]-c[1]); if(d<bd){bd=d;y=c[1];gy=c[1];} }
-  return {pt:[last[0],r96(y)],guideY:gy}; }
-function liveUpdate(){ const el=$('eb-live'); if(!el) return; if(!aim){ el.textContent=''; return; }
-  if(aim.close){ el.textContent='lift to close the room'; return; } const last=draft[draft.length-1];
-  if(!last){ el.textContent='lift to start here'; return; } const L=Math.hypot(aim.pt[0]-last[0],aim.pt[1]-last[1]); el.textContent= L>0 ? `${fmtLen(L)} ${DIRS[dirOf(last,aim.pt)][3]}` : ''; }
-function placeAim(){ const a=aim; aim=null; if(!a) return; if(a.close){ hover=null; closeDraft(); return; }
-  const last=draft[draft.length-1]; if(last && Math.hypot(a.pt[0]-last[0],a.pt[1]-last[1])<1e-6){ render(); renderEdit(); return; }
-  draft.push(a.pt); if(last) heading=(dirOf(last,a.pt)+2)%8; render(); renderEdit(); }
 function cleanPts(p){ const pts=p.map(q=>[...q]); let again=true;
   while(again && pts.length>=3){ again=false; for(let i=0;i<pts.length;i++){ const n=pts.length, a=pts[(i-1+n)%n], b=pts[i], c=pts[(i+1)%n];
     const cr=(b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0]); if(Math.hypot(b[0]-a[0],b[1]-a[1])<1e-6 || Math.abs(cr)<1e-6){ pts.splice(i,1); again=true; break; } } }
   return pts; }
+const D45=Math.SQRT1_2;
+const DIRS=[[1,0,'right','→'],[D45,D45,'down-right','↘'],[0,1,'down','↓'],[-D45,D45,'down-left','↙'],[-1,0,'left','←'],[-D45,-D45,'up-left','↖'],[0,-1,'up','↑'],[D45,-D45,'up-right','↗']];
+const dirOf = (a,b) => ((Math.round(Math.atan2(b[1]-a[1],b[0]-a[0])/(Math.PI/4))%8)+8)%8;
+const segKey = (a,b) => [a,b].map(q=>r96(q[0])+','+r96(q[1])).sort().join('|');
+const snapTo = (v,g) => r96(Math.round(v/g)*g);
+
+// ================= estimating =================
+function estimate(room){
+  const p=prod(room.productId); const holesA=(room.holes||[]).reduce((s,h)=>s+h.w*h.h,0);
+  const A=Math.max(0,Math.abs(area(room.pts))-holesA), Pm=perim(room.pts), doorW=(room.doors||[]).reduce((s,d)=>s+d.w,0);
+  const r={area:A, perim:Pm, baseLf:Math.max(0,Pm-doorW), p};
+  if(!p) return r;
+  const w=1+p.waste/100;
+  if(p.kind==='roll'){ const b=bbox(room.pts); const horiz = room.seam==='h' ? true : room.seam==='v' ? false : b.w>=b.h;
+    const run=horiz?b.w:b.h, across=horiz?b.h:b.w; const drops=Math.ceil(across/p.rollWidth-1e-9); const lf=drops*run*w;
+    r.qty=Math.ceil(lf*p.rollWidth/9*10)/10; r.unit='sq yd'; r.detail=`${drops} drop${drops>1?'s':''} × ${fmtLen(run)}, seams run ${horiz?'left–right':'up–down'}`; r.mat=r.qty*(p.price+(p.pad||0)); }
+  else { r.qty=Math.ceil(A*w/p.coverage-1e-9); r.unit=r.qty===1?'box':'boxes'; r.detail=`${num(r.qty*p.coverage,1)} sq ft delivered at ${p.waste}% waste`; r.mat=r.qty*p.price; }
+  r.lab=A*p.labor; return r; }
+function quote(pj){ pj=pj||P(); const S=DB.settings; const by=new Map(); let baseLf=0, trans=0, area=0;
+  for(const room of pj.rooms){ const e=estimate(room); area+=e.area; if(room.base) baseLf+=e.baseLf; trans+=(room.doors||[]).filter(d=>d.trans!==false).length; if(!e.p) continue;
+    const g=by.get(e.p.id)||{p:e.p,area:0,qty:0,mat:0,lab:0,rooms:[]}; g.area+=e.area; g.qty+=e.qty; g.mat+=e.mat; g.lab+=e.lab; g.rooms.push(room.name); by.set(e.p.id,g); }
+  const lines=[...by.values()].map(g=>({label:g.p.name,color:g.p.color,sub:`${g.rooms.join(', ')} · ${num(g.area,1)} sq ft`,qty:g.p.kind==='roll'?num(Math.round(g.qty*10)/10,1):String(g.qty),unit:g.p.kind==='roll'?'sq yd':'boxes',mat:g.mat,lab:g.lab,area:g.area}));
+  if(baseLf>0){ const pcs=Math.ceil(baseLf*1.1/8); lines.push({label:'Baseboard',sub:`${num(baseLf,1)} lf measured (doorways left out) · 8′ pieces at 10% waste`,qty:String(pcs),unit:'pieces',mat:pcs*8*S.bbPrice,lab:baseLf*S.bbLabor}); }
+  if(trans>0) lines.push({label:'Transition strips',sub:'One per doorway marked for a transition',qty:String(trans),unit:'each',mat:trans*S.trPrice,lab:trans*S.trLabor});
+  for(const x of pj.extras||[]) lines.push({label:x.name||'Item',sub:x.kind==='stairs'?'Stairs':'',qty:num(+x.qty||0,(+x.qty%1)?2:0),unit:x.unit||'',mat:(+x.qty||0)*(+x.price||0),lab:(+x.qty||0)*(+x.labor||0),extra:x.id});
+  const mk=1+(+pj.markup||0)/100; lines.forEach(l=>{ l.mat*=mk; l.lab*=mk; });
+  const mat=lines.reduce((s,l)=>s+l.mat,0), lab=lines.reduce((s,l)=>s+l.lab,0), tax=mat*(+pj.tax||0)/100;
+  return {lines,mat,lab,tax,total:mat+lab+tax,area}; }
+
+// ================= app state =================
+let screen='home', tab='draw';
+let mode='select';           // select | draw | rect
+let sel={room:null,wall:null,door:null,hole:null}, editing=false, wallPicked=false;
+let draft=[], draftKeys=new Set(), shotLast=false, aim=null, hover=null, ang45=false, rectPrev=null;
+let sizeEntry=null;          // {target:'newroom'|'hole', step:'w'|'l', w}
+let view={x:-4,y:-4,w:44,h:44}, drag=null, pointers=new Map(), bleDev=null, undoStack=[], kpShow=true;
+const kp={ft:'',inch:'',fr:0,stage:'ft'};
+const svg=$('canvas'), layer=$('layer'), sheet=$('sheet');
+const room = () => P() && P().rooms.find(r=>r.id===sel.room);
+const svgW = () => svg.clientWidth||400, svgH = () => svg.clientHeight||600;
+function sheetCover(){ return window.innerWidth>=900 ? 0 : sheet.offsetHeight; }
+
+function pushUndo(label){ undoStack.push({rooms:clone(P().rooms),label}); if(undoStack.length>40) undoStack.shift(); $('undo-act').hidden=false; }
+function popUndo(){ const u=undoStack.pop(); if(!u) return; P().rooms=u.rooms; if(!room()) sel={room:null,wall:null,door:null,hole:null}; editing=editing&&!!room(); save(); $('undo-act').hidden=!undoStack.length; renderDraw(); toast('Undid: '+u.label); }
+
+// ================= navigation =================
+function go(scr,t){ screen=scr; if(t) tab=t;
+  const home=scr==='home'; $('home-top').hidden=!home; $('v-home').hidden=!home; $('proj-top').hidden=home; $('tabbar').hidden=home;
+  ['draw','products','sheet','proposal','info'].forEach(k=>{ $('v-'+k).hidden= home||tab!==k; $('t-'+k).setAttribute('aria-selected',String(!home&&tab===k)); });
+  if(home){ renderHome(); return; }
+  $('ptitle').textContent=P().name;
+  if(tab==='draw'){ requestAnimationFrame(()=>{ renderDraw(); if(!view._fitted){ fit(); view._fitted=true; } }); }
+  if(tab==='products') renderProducts(); if(tab==='sheet') renderWorksheet(); if(tab==='proposal') renderProposal(); if(tab==='info') renderInfo();
+  try{ localStorage.setItem(KEY+'-ui',JSON.stringify({screen,tab,current:DB.current})); }catch(e){} }
+function openProject(id){ DB.current=id; sel={room:null,wall:null,door:null,hole:null}; editing=false; mode='select'; draft=[]; undoStack=[]; $('undo-act').hidden=true; view={x:-4,y:-4,w:44,h:44}; save(); go('project','draw'); }
+document.querySelectorAll('.tabbar button').forEach(b=>b.onclick=()=>{ if(mode!=='select') setMode('select'); go('project',b.dataset.tab); });
+$('to-home').onclick=()=>{ if(mode!=='select') setMode('select'); go('home'); };
+
+// ================= home =================
+function renderHome(){
+  const list=[...DB.projects].sort((a,b)=>b.updated-a.updated);
+  $('plist').innerHTML = list.length? list.map(p=>{ const q=quote(p); const d=new Date(p.updated);
+    return `<div class="pcard" data-open="${p.id}" role="button" tabindex="0"><div><div class="nm">${esc(p.name)}</div><div class="sub">${esc([p.customer,p.address].filter(Boolean).join(' · ')||'No customer yet')}</div>
+      <div class="sub">${p.rooms.length} room${p.rooms.length===1?'':'s'} · ${num(q.area,1)} sq ft · updated ${d.toLocaleDateString()}</div></div>
+      <div class="tot">${money(q.total)}</div>
+      <div class="acts"><button class="btn sm ghost" data-dup="${p.id}">Duplicate</button><button class="btn sm ghost danger" data-del="${p.id}">Delete</button></div></div>`; }).join('')
+    : '<div class="card"><p class="smsg">No projects yet. Tap <b>+ New project</b> to start measuring a job.</p></div>'; }
+$('plist').addEventListener('click',e=>{ const dup=e.target.closest('[data-dup]'), del=e.target.closest('[data-del]'), op=e.target.closest('[data-open]');
+  if(dup){ const s=DB.projects.find(p=>p.id===dup.dataset.dup); const c=clone(s); c.id=uid('j'); c.name=s.name+' (copy)'; c.no='FP-'+String(Date.now()).slice(-5); c.updated=Date.now(); DB.projects.push(c); save(); renderHome(); return; }
+  if(del){ const p=DB.projects.find(x=>x.id===del.dataset.del); confirmBox(`Delete “${p.name}”? This can't be undone.`,'Delete',()=>{ DB.projects=DB.projects.filter(x=>x!==p); if(DB.current===p.id) DB.current=null; save(); renderHome(); }); return; }
+  if(op) openProject(op.dataset.open); });
+$('plist').addEventListener('keydown',e=>{ if(e.key==='Enter'&&e.target.dataset.open) openProject(e.target.dataset.open); });
+$('new-proj').onclick=()=>{ modal(`<h3>New project</h3>
+  <label class="f">Customer name<input id="np-customer" autocomplete="off"></label>
+  <label class="f">Job address<input id="np-address" autocomplete="off"></label>
+  <label class="f">Phone<input id="np-phone" inputmode="tel" autocomplete="off"></label>
+  <div class="srow"><button class="btn primary" id="np-go" style="flex:1">Start measuring</button><button class="btn ghost" data-close>Cancel</button></div>`);
+  setTimeout(()=>$('np-customer').focus(),50);
+  $('np-go').onclick=()=>{ const c=$('np-customer').value.trim(), a=$('np-address').value.trim(); const p=newProject({customer:c,address:a,phone:$('np-phone').value.trim(),name:c||a||'New project'}); DB.projects.push(p); closeModal(); openProject(p.id); }; };
+
+// ================= modal / confirm / toast =================
+function modal(html){ $('modal').innerHTML=`<div class="scrim" id="scrim"><div class="menu" role="dialog" aria-modal="true">${html}</div></div>`;
+  $('scrim').addEventListener('click',e=>{ if(e.target.id==='scrim'||e.target.closest('[data-close]')) closeModal(); }); }
+function closeModal(){ $('modal').innerHTML=''; }
+function confirmBox(text,yes,fn){ modal(`<p style="margin:0;font-size:16px;line-height:1.4">${esc(text)}</p><div class="srow"><button class="btn primary" id="cf-yes" style="flex:1">${esc(yes)}</button><button class="btn ghost" data-close>Keep</button></div>`); $('cf-yes').onclick=()=>{ closeModal(); fn(); }; }
+let tT; function toast(msg,act,fn){ $('toast-msg').textContent=msg; const b=$('toast-act'); b.hidden=!act; if(act){ b.textContent=act; b.onclick=()=>{ $('toast').hidden=true; fn(); }; } $('toast').hidden=false; clearTimeout(tT); tT=setTimeout(()=>$('toast').hidden=true,4000); }
+
+// ================= drawing: view =================
+function syncView(){ view.h = view.w*svgH()/svgW(); }
+function toWorld(cx,cy){ const rc=svg.getBoundingClientRect(); const s=view.w/svgW(); return [view.x+(cx-rc.left)*s, view.y+(cy-rc.top)*s]; }
+const fs0 = () => view.w/svgW()*14;
+const gridStep = () => view.w<14 ? 1/12 : view.w<45 ? 0.5 : 1;
+function fit(){ const pj=P(); const pts=pj.rooms.flatMap(r=>r.pts).concat(draft); const W=svgW(), H=Math.max(160,svgH()-sheetCover()-60);
+  if(!pts.length){ view.w=Math.max(30, 30*W/H); view.x=-4; syncView(); view.y=-4; renderDraw(true); return; }
+  const b=bbox(pts), m=Math.max(3,Math.max(b.w,b.h)*0.12); const needW=Math.max((b.w+2*m), (b.h+2*m)*W/H, 8);
+  view.w=needW; syncView(); const s=view.w/W; view.x=b.x+b.w/2-view.w/2; view.y=b.y+b.h/2-(H/2+50)*s; renderDraw(true); }
+$('fit').onclick=fit;
+$('undo-act').onclick=()=>{ if(mode==='draw') undoPoint(); else popUndo(); };
+window.addEventListener('resize',()=>{ if(screen==='project'&&tab==='draw'){ syncView(); renderDraw(true); } });
+
+// ================= drawing: render =================
+function renderCanvas(){
+  syncView(); svg.setAttribute('viewBox',`${view.x} ${view.y} ${view.w} ${view.h}`);
+  const g=$('gridbg'), pad=400; g.setAttribute('x',Math.floor(view.x/5)*5-pad); g.setAttribute('y',Math.floor(view.y/5)*5-pad); g.setAttribute('width',view.w+pad*2); g.setAttribute('height',view.h+pad*2);
+  const fs=fs0(), pj=P(); let h='';
+  for(const r of pj.rooms){ const p=prod(r.productId), c=p?p.color:'#8a8f8c', isSel=r.id===sel.room;
+    h+=`<polygon data-room="${r.id}" points="${r.pts.map(q=>q.join(',')).join(' ')}" fill="${c}" fill-opacity="${isSel?0.4:0.24}" stroke="var(--ink)" stroke-width="${fs*(isSel?0.16:0.1)}" stroke-linejoin="miter"/>`;
+    (r.holes||[]).forEach((o,i)=>{ const hs=isSel&&sel.hole===i; h+=`<rect data-hole="${i}" data-hroom="${r.id}" x="${o.x}" y="${o.y}" width="${o.w}" height="${o.h}" fill="url(#hatch)" stroke="${hs?'var(--sel)':'var(--ink)'}" stroke-width="${fs*(hs?0.16:0.08)}" stroke-dasharray="${fs*0.4} ${fs*0.2}" style="${isSel?'cursor:move':''}"${isSel?'':' pointer-events="none"'}/>`; }); }
+  for(const r of pj.rooms){ const isSel=r.id===sel.room, sgn=area(r.pts)>0?1:-1;
+    r.pts.forEach((a,i)=>{ const b=r.pts[(i+1)%r.pts.length], L=Math.hypot(b[0]-a[0],b[1]-a[1]); if(L<0.8) return;
+      const ux=(b[0]-a[0])/L, uy=(b[1]-a[1])/L, nx=-uy*sgn, ny=ux*sgn, off=fs*0.95; // label sits outside the room
+      const mx=(a[0]+b[0])/2-nx*off, my=(a[1]+b[1])/2-ny*off; let ang=Math.atan2(uy,ux)*180/Math.PI; if(ang>90||ang<-90) ang+=180;
+      const ws=isSel&&editing&&sel.wall===i, st=wallState(r,i);
+      const col= ws?'var(--accent)': isSel&&st==='need'?'var(--accent)': r.measured[i]?'var(--ink)':'var(--muted)';
+      h+=`<text x="${mx}" y="${my}" transform="rotate(${ang} ${mx} ${my})" text-anchor="middle" dominant-baseline="middle" font-family="JetBrains Mono,monospace" font-size="${fs*(ws?0.98:0.8)}" font-weight="${ws||(isSel&&st==='need')?700:500}" fill="${col}" pointer-events="none" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.14}">${fmtLen(L)}</text>`; });
+    (r.doors||[]).forEach((d,i)=>{ const g=doorGeom(r,d); if(!g) return; const ds=isSel&&sel.door===i;
+      h+=`<line x1="${g.a[0]}" y1="${g.a[1]}" x2="${g.b[0]}" y2="${g.b[1]}" stroke="var(--sheet)" stroke-width="${fs*0.34}" pointer-events="none"/>`;
+      h+=`<line x1="${g.a[0]}" y1="${g.a[1]}" x2="${g.b[0]}" y2="${g.b[1]}" stroke="${ds?'var(--sel)':'var(--accent)'}" stroke-width="${fs*0.12}" stroke-dasharray="${fs*0.3} ${fs*0.18}" pointer-events="none"/>`;
+      [g.a,g.b].forEach(q=>{ h+=`<line x1="${q[0]-g.nx*fs*0.4}" y1="${q[1]-g.ny*fs*0.4}" x2="${q[0]+g.nx*fs*0.4}" y2="${q[1]+g.ny*fs*0.4}" stroke="var(--ink)" stroke-width="${fs*0.1}" pointer-events="none"/>`; });
+      if(isSel) h+=`<line data-door="${i}" x1="${g.a[0]}" y1="${g.a[1]}" x2="${g.b[0]}" y2="${g.b[1]}" stroke="transparent" stroke-width="${fs*2}" style="cursor:ew-resize"/>`; });
+    const [cx,cy]=centroid(r.pts), e=estimate(r);
+    h+=`<text x="${cx}" y="${cy-fs*0.3}" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="700" font-size="${fs*1.15}" fill="var(--ink)" pointer-events="none" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.2}">${esc(r.name)}</text>`;
+    h+=`<text x="${cx}" y="${cy+fs*0.95}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="${fs*0.82}" fill="var(--ink)" pointer-events="none" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.16}">${num(e.area,1)} sq ft</text>`; }
+  const sr=room();
+  if(sr && mode==='select'){
+    sr.pts.forEach((a,i)=>{ const b=sr.pts[(i+1)%sr.pts.length];
+      if(editing&&sel.wall===i) h+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="var(--accent)" stroke-width="${fs*0.32}" stroke-linecap="round" pointer-events="none"/>`;
+      h+=`<line data-wall="${i}" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="transparent" stroke-width="${fs*1.9}" stroke-linecap="round" style="cursor:pointer"/>`; });
+    sr.pts.forEach((q,i)=>{ h+=`<circle cx="${q[0]}" cy="${q[1]}" r="${fs*0.36}" fill="var(--sheet)" stroke="var(--sel)" stroke-width="${fs*0.12}" pointer-events="none"/><circle data-vi="${i}" cx="${q[0]}" cy="${q[1]}" r="${fs*1.15}" fill="transparent" style="cursor:grab"/>`; });
+  }
+  if(mode==='rect' && rectPrev){ const [x1,y1,x2,y2]=rectPrev, x=Math.min(x1,x2), y=Math.min(y1,y2), w=Math.abs(x2-x1), hh=Math.abs(y2-y1);
+    h+=`<rect x="${x}" y="${y}" width="${w}" height="${hh}" fill="var(--accent)" fill-opacity=".15" stroke="var(--accent)" stroke-width="${fs*0.16}"/>`;
+    if(w>0.5) h+=`<text x="${x+w/2}" y="${y-fs*0.7}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-weight="700" font-size="${fs*1.1}" fill="var(--accent)" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.2}">${fmtLen(w)}</text>`;
+    if(hh>0.5) h+=`<text x="${x+w+fs*0.6}" y="${y+hh/2}" dominant-baseline="middle" font-family="JetBrains Mono,monospace" font-weight="700" font-size="${fs*1.1}" fill="var(--accent)" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.2}">${fmtLen(hh)}</text>`; }
+  if(mode==='draw'){ const lw=fs*0.07;
+    if(hover){ h+=`<line x1="${view.x}" y1="${hover[1]}" x2="${view.x+view.w}" y2="${hover[1]}" stroke="var(--accent)" stroke-opacity=".45" stroke-width="${lw}" pointer-events="none"/><line x1="${hover[0]}" y1="${view.y}" x2="${hover[0]}" y2="${view.y+view.h}" stroke="var(--accent)" stroke-opacity=".45" stroke-width="${lw}" pointer-events="none"/>`;
+      if(aim&&aim.guideX!=null) h+=`<line x1="${aim.guideX}" y1="${view.y}" x2="${aim.guideX}" y2="${view.y+view.h}" stroke="var(--sel)" stroke-width="${lw*1.6}" stroke-dasharray="${fs*0.4} ${fs*0.25}" pointer-events="none"/>`;
+      if(aim&&aim.guideY!=null) h+=`<line x1="${view.x}" y1="${aim.guideY}" x2="${view.x+view.w}" y2="${aim.guideY}" stroke="var(--sel)" stroke-width="${lw*1.6}" stroke-dasharray="${fs*0.4} ${fs*0.25}" pointer-events="none"/>`; }
+    const pts = aim&&aim.close ? [...draft,draft[0]] : hover ? [...draft,hover] : draft;
+    if(pts.length>1) h+=`<polyline points="${pts.map(q=>q.join(',')).join(' ')}" fill="none" stroke="var(--ink)" stroke-width="${fs*0.14}" stroke-linejoin="miter" pointer-events="none"/>`;
+    // the active wall (the one a reading or the keypad will set) is drawn in the accent colour
+    const act = hover&&!(aim&&aim.close)&&draft.length ? [draft[draft.length-1],hover] : (!hover&&draft.length>=2 ? [draft[draft.length-2],draft[draft.length-1]] : null);
+    if(act) h+=`<line x1="${act[0][0]}" y1="${act[0][1]}" x2="${act[1][0]}" y2="${act[1][1]}" stroke="var(--accent)" stroke-width="${fs*0.3}" stroke-linecap="round" pointer-events="none"/>`;
+    for(let i=1;i<pts.length;i++){ const [x1,y1]=pts[i-1],[x2,y2]=pts[i], L=Math.hypot(x2-x1,y2-y1); if(L<0.25) continue; const live=(hover&&i===pts.length-1)||(!hover&&i===pts.length-1&&draft.length>=2);
+      const vert=Math.abs(x2-x1)<1e-6, tx=(x1+x2)/2+(vert?fs*1.2:0), ty=(y1+y2)/2-(vert?0:fs*0.8);
+      h+=`<text x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="middle" font-family="JetBrains Mono,monospace" font-size="${fs*(live?1.15:0.85)}" font-weight="${live?700:500}" fill="${live?'var(--accent)':'var(--ink)'}" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.2}" pointer-events="none">${fmtLen(L)}</text>`; }
+    draft.forEach((q,i)=>{ const first=i===0&&draft.length>=3; h+=`<circle cx="${q[0]}" cy="${q[1]}" r="${fs*(first?0.55:0.32)}" fill="${i===0?'var(--accent)':'var(--sheet)'}" stroke="var(--accent)" stroke-width="${fs*0.12}" pointer-events="none"/>`;
+      if(first&&aim&&aim.close) h+=`<circle cx="${q[0]}" cy="${q[1]}" r="${fs*1.1}" fill="none" stroke="var(--good)" stroke-width="${fs*0.15}" pointer-events="none"/>`; });
+    if(hover&&!(aim&&aim.close)) h+=`<circle cx="${hover[0]}" cy="${hover[1]}" r="${fs*0.42}" fill="var(--accent)" stroke="var(--sheet)" stroke-width="${fs*0.1}" pointer-events="none"/>`; }
+  layer.innerHTML=h; }
+function doorGeom(r,d){ const n=r.pts.length; if(d.wall>=n) return null; const a=r.pts[d.wall], b=r.pts[(d.wall+1)%n], L=Math.hypot(b[0]-a[0],b[1]-a[1]); if(L<0.1) return null;
+  const ux=(b[0]-a[0])/L, uy=(b[1]-a[1])/L, w=Math.min(d.w,L), c=Math.min(L-w/2,Math.max(w/2,d.t*L));
+  return {a:[a[0]+ux*(c-w/2),a[1]+uy*(c-w/2)], b:[a[0]+ux*(c+w/2),a[1]+uy*(c+w/2)], nx:-uy, ny:ux, L, ux, uy, a0:a}; }
+function renderDraw(canvasOnly){ if(!P()) return; renderCanvas(); if(!canvasOnly){ renderSheet(); if(editing||sel.door!=null||sel.hole!=null) keepInView(); } positionFab(); }
+// slide the view so the selected room isn't hidden under the bottom panel
+function keepInView(){ const r=room(); if(!r) return; const b=bbox(r.pts), s=view.w/svgW(), visH=(svgH()-sheetCover())*s, m=fs0()*2.2;
+  let moved=false; if(b.h+2*m>visH||b.w+2*m>view.w){ const k=Math.max((b.h+2*m)/visH,(b.w+2*m)/view.w); view.w*=k; syncView(); moved=true; }
+  const s2=view.w/svgW(), vh=(svgH()-sheetCover())*s2;
+  if(b.y+b.h+m>view.y+vh){ view.y=b.y+b.h+m-vh; moved=true; } if(b.y-m<view.y){ view.y=b.y-m; moved=true; }
+  if(b.x+b.w+m>view.x+view.w){ view.x=b.x+b.w+m-view.w; moved=true; } if(b.x-m<view.x){ view.x=b.x-m; moved=true; }
+  if(moved) renderCanvas(); }
+function positionFab(){ const fab=$('fab'); fab.hidden = mode!=='select' || editing || sizeEntry!==null; fab.style.bottom = (sheetCover()+14)+'px'; }
+
+// ================= keypad =================
+function kpReset(){ kp.ft=''; kp.inch=''; kp.fr=0; kp.stage='ft'; }
+function kpValue(){ if(kp.ft===''&&kp.inch===''&&!kp.fr) return NaN; return (+kp.ft||0)+((+kp.inch||0)+kp.fr/8)/12; }
+function kpText(){ if(kp.ft===''&&kp.inch===''&&!kp.fr) return null; return `${kp.ft||0}′` + (kp.stage==='in'||kp.inch||kp.fr ? ` ${kp.inch}${FR[kp.fr]}″` : ''); }
+function kpHTML(label, placeholder){ const t=kpText();
+  return `<div class="kp" id="kp"><div class="kp-disp"><span class="lbl">${esc(label)}</span><span class="val${t?'':' ph'}" id="kp-val">${esc(t||placeholder||'0′')}</span></div>
+  <div class="kp-fr">${FR.slice(1).map((f,i)=>`<button class="k${kp.fr===i+1?' on':''}" data-k="fr${i+1}" aria-label="${i+1} eighths">${f}</button>`).join('')}</div>
+  <div class="kp-keys">
+   ${['7','8','9','bk','4','5','6','ftin','1','2','3','clr','-','0','+','set'].map(k=>{ const lab={bk:'⌫',ftin:kp.stage==='ft'?'ft ▸ in':'in',clr:'Clear','-':'−⅛″','+':'+⅛″',set:'Set'}[k]||k;
+     const cls= k==='set'?'k set': (k==='ftin'&&kp.stage==='in')?'k fn on': ['bk','clr','-','+','ftin'].includes(k)?'k fn':'k';
+     return `<button class="${cls}" data-k="${k}" aria-label="${{bk:'Backspace',ftin:'Switch to inches',clr:'Clear','-':'Shorten by an eighth','+':'Lengthen by an eighth',set:'Set length'}[k]||k}">${lab}</button>`; }).join('')}
+  </div></div>`; }
+function kpRefresh(){ const v=$('kp-val'); if(!v) return; const t=kpText(); if(t){ v.textContent=t; v.classList.remove('ph'); } else { v.classList.add('ph'); v.textContent=kpPlaceholder(); }
+  document.querySelectorAll('#kp [data-k^="fr"]').forEach((b,i)=>b.classList.toggle('on',kp.fr===i+1));
+  const ft=document.querySelector('#kp [data-k="ftin"]'); if(ft){ ft.textContent=kp.stage==='ft'?'ft ▸ in':'in'; ft.classList.toggle('on',kp.stage==='in'); } }
+function kpPress(k){
+  if(/^\d$/.test(k)){ if(kp.stage==='ft'){ if(kp.ft.length<3) kp.ft+=k; } else { if(kp.inch.length<2 && +(kp.inch+k)<12) kp.inch+=k; } }
+  else if(k==='ftin'){ kp.stage='in'; }
+  else if(k==='bk'){ if(kp.fr) kp.fr=0; else if(kp.stage==='in'&&kp.inch) kp.inch=kp.inch.slice(0,-1); else if(kp.stage==='in') kp.stage='ft'; else kp.ft=kp.ft.slice(0,-1); }
+  else if(k==='clr'){ kpReset(); }
+  else if(k.startsWith('fr')){ const f=+k.slice(2); kp.fr = kp.fr===f?0:f; if(kp.stage==='ft') kp.stage='in'; }
+  else if(k==='-'||k==='+'){ nudge(k==='+'?1/96:-1/96); return; }
+  else if(k==='set'){ const L=kpValue(); if(!(L>0)){ sheetMsg('Type a length first: feet, then “ft ▸ in” for inches.','err'); return; } kpReset(); applyLength(L,'keypad'); return; }
+  kpRefresh(); }
+sheet.addEventListener('click',e=>{ const b=e.target.closest('[data-k]'); if(b){ kpPress(b.dataset.k); } });
+document.addEventListener('keydown',e=>{ if(screen!=='project'||tab!=='draw'||!$('kp')||e.target.matches('input,textarea,select')||$('modal').innerHTML) return;
+  if(/^\d$/.test(e.key)) kpPress(e.key); else if(e.key==="'"||e.key==='f') kpPress('ftin'); else if(e.key==='Backspace'){ e.preventDefault(); kpPress('bk'); } else if(e.key==='Enter'||e.key==='"'){ e.preventDefault(); kpPress('set'); }
+  else if(e.key==='ArrowUp') kpPress('+'); else if(e.key==='ArrowDown') kpPress('-'); });
+
+// What the keypad, the nudge buttons and the laser act on right now
+function target(){
+  if(sizeEntry) return {kind:'size'};
+  if(mode==='draw') return {kind:'draw'};
+  const r=room(); if(!r) return {kind:'none'};
+  if(sel.door!=null&&r.doors[sel.door]) return {kind:'door',r,d:r.doors[sel.door]};
+  if(sel.hole!=null&&r.holes[sel.hole]) return {kind:'hole',r};
+  if(editing&&sel.wall!=null) return {kind:'wall',r};
+  return {kind:'room',r}; }
+function kpPlaceholder(){ const t=target();
+  if(t.kind==='wall'){ const a=axisOf(t.r.pts,sel.wall); return a?fmtLen(a.L):'0′'; }
+  if(t.kind==='draw'&&draft.length>=2){ const a=draft[draft.length-2], b=draft[draft.length-1]; return fmtLen(Math.hypot(b[0]-a[0],b[1]-a[1])); }
+  if(t.kind==='door') return fmtLen(t.d.w);
+  if(t.kind==='size'&&sizeEntry.target==='hole'){ const o=room().holes[sel.hole]; return o?fmtLen(sizeEntry.step==='w'?o.w:o.h):'0′'; }
+  return '0′'; }
+function applyLength(L,src){ const t=target();
+  if(t.kind==='wall') return applyWall(L);
+  if(t.kind==='draw') return drawLength(L);
+  if(t.kind==='door'){ pushUndo('doorway width'); t.d.w=r96(L); save(); renderDraw(); sheetMsg(`Doorway set to ${fmtLen(L)}.`,'ok'); return; }
+  if(t.kind==='size') return sizeStep(L);
+  if(t.kind==='room'){ editing=true; wallPicked=false; sel.wall=nextNeeded(t.r,-1)??0; return applyWall(L); }
+  // nothing selected: a reading starts a new room going right
+  setMode('draw'); drawLength(L); }
+function nudge(d){ const t=target();
+  if(t.kind==='wall'){ const a=axisOf(t.r.pts,sel.wall); if(a){ wallPicked=true; applyWall(Math.max(1/96,a.L+d),true); } }
+  else if(t.kind==='draw'&&draft.length>=2){ const a=draft[draft.length-2], b=draft[draft.length-1]; drawLength(Math.max(1/96,Math.hypot(b[0]-a[0],b[1]-a[1])+d),true); }
+  else if(t.kind==='door'){ t.d.w=r96(Math.max(1/12,t.d.w+d)); save(); renderDraw(); } }
+
+// ================= sheet (context panel) =================
+let pendingMsg=null;
+function sheetMsg(text,cls){ pendingMsg={text,cls}; renderSheet(); }
+function renderSheet(){
+  const pj=P(); if(!pj) return; const t=target(); const msg=pendingMsg; pendingMsg=null; const m = msg?`<div class="smsg ${msg.cls||''}">${esc(msg.text)}</div>`:'';
+  const q=quote(pj); let h='';
+  if(t.kind==='size'){ const isHole=sizeEntry.target==='hole', w=sizeEntry.step==='w';
+    h=`<div class="srow"><span class="stitle">${isHole?'Cutout size':'Rectangle room'}</span><button class="btn ghost sm" data-a="size-cancel">Cancel</button></div>
+      <div class="smsg">${w?`Step 1 of 2: <b>width</b> (left to right). Type it or shoot it with the D2.`:`Step 2 of 2: <b>length</b> (top to bottom). Width is ${fmtLen(sizeEntry.w)}.`}</div>${m}${kpHTML(w?'Width':'Length',kpPlaceholder())}`; }
+  else if(t.kind==='draw'){ const n=draft.length;
+    const status = !n ? 'Tap where the first corner is.' : n===1 ? 'Tap the direction the first wall runs, then shoot it with the D2 or type its length.' : shotLast ? 'Tap the direction of the next wall, or shoot again to go on turning right.' : 'Shoot this wall with the D2, or type its length. Drag to adjust it.';
+    h=`<div class="srow"><span class="stitle">Free draw · ${Math.max(0,n-1)} wall${n===2?'':'s'}</span><span class="stat" id="live"></span></div>
+      <div class="smsg">${esc(status)}</div>${m}
+      <div class="srow"><button class="btn" data-a="d-undo"${n?'':' disabled'}>Undo</button><button class="btn primary" data-a="d-close"${n>=3?'':' disabled'} style="flex:1">Close room</button><button class="btn" data-a="d-45" aria-pressed="${ang45}" title="Allow 45° walls">45°</button><button class="btn ghost" data-a="d-cancel">Cancel</button></div>
+      ${n>=2||kpShow?kpHTML('Active wall',kpPlaceholder()):''}`; }
+  else if(mode==='rect'){ h=`<div class="srow"><span class="stitle">Draw a rectangle</span><button class="btn ghost sm" data-a="rect-cancel">Cancel</button></div><div class="smsg">Put your finger on one corner and drag to the opposite corner. You'll measure the walls next.</div>${m}`; }
+  else if(t.kind==='door'){ const d=t.d;
+    h=`<div class="srow"><span class="stitle">Doorway</span><button class="btn ghost sm" data-a="desel-sub">Done</button></div>
+      <div class="smsg">Drag it along the wall to place it. Baseboard skips the opening.</div>${m}
+      <div class="srow"><label class="f" style="flex-direction:row;align-items:center;gap:8px;font-size:15px;color:var(--ink)"><input type="checkbox" id="door-trans" style="width:auto"${d.trans!==false?' checked':''}> Needs a transition strip</label><button class="btn danger" data-a="door-del">${ICON.trash} Remove</button></div>
+      ${kpHTML('Opening width',fmtLen(d.w))}`; }
+  else if(t.kind==='hole'){ const o=t.r.holes[sel.hole];
+    h=`<div class="srow"><span class="stitle">Cutout · ${fmtLen(o.w)} × ${fmtLen(o.h)}</span><button class="btn ghost sm" data-a="desel-sub">Done</button></div>
+      <div class="smsg">Drag it into place. Its ${num(o.w*o.h,1)} sq ft comes off ${esc(t.r.name)}.</div>${m}
+      <div class="srow"><button class="btn" data-a="hole-size" style="flex:1">Set size</button><button class="btn danger" data-a="hole-del">${ICON.trash} Remove</button></div>`; }
+  else if(t.kind==='wall'){ const r=t.r, n=r.pts.length; if(sel.wall==null||sel.wall>=n) sel.wall=nextNeeded(r,-1)??0;
+    const chips=r.pts.map((_,i)=>{ const a=axisOf(r.pts,i), st=wallState(r,i); return `<button class="chip ${st}${i===sel.wall?' on':''}" data-chip="${i}">${st==='done'?'✓ ':''}${i+1} · ${fmtLen(a?a.L:0)}</button>`; }).join('');
+    const nc=needCount(r), st=wallState(r,sel.wall);
+    const info = msg?'' : nc ? `<div class="smsg">${nc} more reading${nc>1?'s':''} needed. Shoot the <b>${sideOf(r,sel.wall)}</b> wall, or type it.</div>` : `<div class="smsg ok">All walls measured · ${num(estimate(r).area,1)} sq ft${r.gap>1/12?` · closed with a ${fmtIn(r.gap)} gap`:''}</div>`;
+    h=`<div class="srow"><span class="stitle">${esc(r.name)} · wall ${sel.wall+1} of ${n}</span><button class="btn sm" data-a="w-prev" aria-label="Previous wall">‹</button><button class="btn sm" data-a="w-next" aria-label="Next wall">›</button><button class="btn primary sm" data-a="w-done">Done</button></div>
+      <div class="chips">${chips}</div>${info}${m}
+      ${kpShow?kpHTML(`${sideOf(r,sel.wall)} wall · ${st==='done'?'measured':st==='need'?'needs reading':'worked out'}`,kpPlaceholder()):`<button class="btn" data-a="kp-show">Show keypad</button>`}
+      ${kpShow&&bleDev?'<button class="btn ghost sm" data-a="kp-hide">Hide keypad (using the D2)</button>':''}`; }
+  else if(t.kind==='room'){ const r=t.r, e=estimate(r), nc=needCount(r);
+    h=`<div class="srow"><input id="rm-name" value="${esc(r.name)}" aria-label="Room name"><select id="rm-prod" aria-label="Flooring">${productOptions(r.productId)}</select></div>
+      <div class="stat"><b>${num(e.area,1)}</b> sq ft · <b>${num(e.perim,1)}</b> lf walls${e.p?` · <b>${e.unit==='sq yd'?num(e.qty,1):e.qty}</b> ${e.unit}`:''}</div>
+      ${nc?`<div class="smsg err">⚠ ${nc} wall${nc>1?'s':''} not measured yet, so this size is a sketch.</div>`:''}${r.gap>1/12?`<div class="smsg err">⚠ Closed with a ${fmtIn(r.gap)} gap.</div>`:''}${m}
+      <div class="tools">
+        <button class="tool" data-a="r-measure">${ICON.measure}Measure</button>
+        <button class="tool" data-a="r-door">${ICON.doorS}Doorway</button>
+        <button class="tool" data-a="r-hole">${ICON.holeS}Cutout</button>
+        <button class="tool" data-a="r-rotate">${ICON.rotate}Rotate</button>
+        <button class="tool" data-a="r-flip">${ICON.flip}Flip</button>
+        <button class="tool" data-a="r-copy">${ICON.copy}Copy</button>
+        <button class="tool" data-a="r-desel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12l5 5L20 6"/></svg>Done</button>
+        <button class="tool danger" data-a="r-del">${ICON.trash}Delete</button>
+      </div>
+      <div class="srow"><label class="f" style="flex-direction:row;align-items:center;gap:8px;font-size:14px;color:var(--ink);min-width:0"><input type="checkbox" id="rm-base" style="width:auto"${r.base?' checked':''}> Baseboard</label>
+        ${e.p&&e.p.kind==='roll'?`<label class="f" style="min-width:150px">Carpet seams<select id="rm-seam"><option value="auto"${r.seam==='auto'?' selected':''}>Fewest seams</option><option value="h"${r.seam==='h'?' selected':''}>Run left–right</option><option value="v"${r.seam==='v'?' selected':''}>Run up–down</option></select></label>`:''}</div>`; }
+  else { const rough=pj.rooms.filter(r=>needCount(r)).length;
+    h=`<div class="srow"><span class="stitle">${pj.rooms.length?`${pj.rooms.length} room${pj.rooms.length>1?'s':''} · ${num(q.area,1)} sq ft`:'Start measuring'}</span><span class="stat"><b>${money(q.total)}</b></span></div>
+      ${m||`<div class="smsg">${pj.rooms.length?`Tap a room to measure or edit it. Tap <b>+</b> to add rooms, doorways, cutouts or stairs.${rough?` <b>${rough}</b> room${rough>1?'s are':' is'} still a sketch.`:''}`:`Tap <b>+</b> to add a room. With the D2 connected you can also just start shooting walls.`}</div>`}`; }
+  sheet.innerHTML=h; positionFab(); liveUpdate(); }
+function productOptions(id){ return '<option value="">— No flooring —</option>'+DB.products.map(p=>`<option value="${p.id}"${p.id===id?' selected':''}>${esc(p.name)}</option>`).join(''); }
+function flash(){ sheet.classList.add('flash'); setTimeout(()=>sheet.classList.remove('flash'),350); }
+
+sheet.addEventListener('click',e=>{ const c=e.target.closest('[data-chip]'); if(c){ sel.wall=+c.dataset.chip; wallPicked=true; kpReset(); renderDraw(); return; }
+  const b=e.target.closest('[data-a]'); if(!b) return; const a=b.dataset.a, r=room();
+  switch(a){
+    case 'size-cancel': sizeEntry=null; kpReset(); renderDraw(); break;
+    case 'd-undo': undoPoint(); break;
+    case 'd-close': closeDraft(); break;
+    case 'd-45': ang45=!ang45; sheetMsg(ang45?'45° walls on: drag at an angle to draw one.':'Walls lock to 90° again.'); break;
+    case 'd-cancel': setMode('select'); break;
+    case 'rect-cancel': setMode('select'); break;
+    case 'desel-sub': sel.door=null; sel.hole=null; renderDraw(); break;
+    case 'door-del': pushUndo('remove doorway'); r.doors.splice(sel.door,1); sel.door=null; save(); renderDraw(); break;
+    case 'hole-del': pushUndo('remove cutout'); r.holes.splice(sel.hole,1); sel.hole=null; save(); renderDraw(); break;
+    case 'hole-size': sizeEntry={target:'hole',step:'w'}; kpReset(); renderDraw(); break;
+    case 'w-prev': case 'w-next': { const n=r.pts.length; sel.wall=((sel.wall+(a==='w-next'?1:-1))%n+n)%n; wallPicked=true; kpReset(); renderDraw(); break; }
+    case 'w-done': editing=false; sel.wall=null; renderDraw(); break;
+    case 'kp-show': kpShow=true; renderSheet(); break;
+    case 'kp-hide': kpShow=false; renderSheet(); break;
+    case 'r-measure': editing=true; wallPicked=false; sel.wall=nextNeeded(r,-1)??0; kpReset(); renderDraw(); break;
+    case 'r-door': addDoor(); break;
+    case 'r-hole': addHole(); break;
+    case 'r-rotate': transformRoom(r,'rotate'); break;
+    case 'r-flip': transformRoom(r,'flip'); break;
+    case 'r-copy': copyRoom(r); break;
+    case 'r-desel': sel={room:null,wall:null,door:null,hole:null}; editing=false; renderDraw(); break;
+    case 'r-del': { pushUndo('delete '+r.name); const name=r.name; P().rooms=P().rooms.filter(x=>x!==r); sel={room:null,wall:null,door:null,hole:null}; editing=false; save(); renderDraw(); toast(`Deleted ${name}`,'Undo',popUndo); break; }
+  } });
+sheet.addEventListener('input',e=>{ const r=room(); if(!r) return;
+  if(e.target.id==='rm-name'){ r.name=e.target.value; save(); renderCanvas(); } });
+sheet.addEventListener('change',e=>{ const r=room(); if(!r) return; const id=e.target.id;
+  if(id==='rm-prod'){ r.productId=e.target.value; save(); renderDraw(); }
+  if(id==='rm-base'){ r.base=e.target.checked; save(); renderDraw(); }
+  if(id==='rm-seam'){ r.seam=e.target.value; save(); renderDraw(); }
+  if(id==='door-trans'){ r.doors[sel.door].trans=e.target.checked; save(); } });
+
+// ================= add menu =================
+$('fab').onclick=()=>{ const r=room();
+  modal(`<h3>Add</h3><div class="group">Rooms</div><div class="mgrid">
+    <button class="mitem" data-add="rect">${ICON.rect}Drag a rectangle</button>
+    <button class="mitem" data-add="size">${ICON.size}Rectangle by size</button>
+    <button class="mitem" data-add="draw">${ICON.draw}Free draw</button>
+    <button class="mitem" data-add="L">${ICON.L}L-shape</button>
+    <button class="mitem" data-add="T">${ICON.T}T-shape</button>
+    <button class="mitem" data-add="U">${ICON.U}U-shape</button></div>
+    <div class="group">${r?`In ${esc(r.name)}`:'Select a room first for these'}</div><div class="mgrid">
+    <button class="mitem" data-add="door"${r?'':' disabled'}>${ICON.door}Doorway / transition</button>
+    <button class="mitem" data-add="hole"${r?'':' disabled'}>${ICON.hole}Cutout (cabinets, island)</button>
+    <button class="mitem" data-add="stairs">${ICON.stairs}Stairs</button></div>
+    <button class="btn ghost" data-close>Cancel</button>`);
+  $('modal').querySelector('.menu').addEventListener('click',e=>{ const b=e.target.closest('[data-add]'); if(!b||b.disabled) return; const k=b.dataset.add; closeModal();
+    if(k==='rect'){ sel={room:null,wall:null,door:null,hole:null}; editing=false; setMode('rect'); }
+    else if(k==='size'){ sel={room:null,wall:null,door:null,hole:null}; editing=false; sizeEntry={target:'newroom',step:'w'}; kpReset(); renderDraw(); }
+    else if(k==='draw'){ sel={room:null,wall:null,door:null,hole:null}; editing=false; setMode('draw'); }
+    else if(k==='L'||k==='T'||k==='U') addShape(k);
+    else if(k==='door') addDoor();
+    else if(k==='hole') addHole();
+    else if(k==='stairs'){ P().extras.push({id:uid('x'),kind:'stairs',name:'Stairs',qty:13,unit:'step',price:12,labor:28}); save(); go('project','sheet'); toast('Stairs added. Set the step count and prices here.'); } }); };
+
+function freeSpot(){ const all=P().rooms.flatMap(r=>r.pts); return all.length?[snapTo(Math.max(...all.map(q=>q[0]))+3,1), snapTo(Math.min(...all.map(q=>q[1])),1)]:[0,0]; }
+function addRoom(pts,measured,name){ pushUndo('add room'); const r=normRoom({id:uid('r'),name:name||'Room '+(P().rooms.length+1),pts,productId:DB.products[0]?.id||'',base:true,measured,doors:[],holes:[]}); P().rooms.push(r); save(); return r; }
+function addShape(k){ const [x0,y0]=freeSpot();
+  const S={L:[[0,0],[16,0],[16,8],[10,8],[10,14],[0,14]], T:[[0,0],[20,0],[20,6],[13,6],[13,16],[7,16],[7,6],[0,6]], U:[[0,0],[6,0],[6,8],[12,8],[12,0],[18,0],[18,14],[0,14]]}[k];
+  const r=addRoom(S.map(([x,y])=>[x0+x,y0+y]),S.map(()=>false),k+'-shaped room'); setMode('select'); sel={room:r.id,wall:0,door:null,hole:null}; editing=true; wallPicked=false; kpReset(); fit(); }
+function addDoor(){ const r=room(); if(!r) return; let wi=editing&&sel.wall!=null?sel.wall:null;
+  if(wi==null){ let best=0,bl=0; r.pts.forEach((_,i)=>{ const a=axisOf(r.pts,i); if(a&&a.L>bl){bl=a.L;best=i;} }); wi=best; }
+  pushUndo('add doorway'); r.doors.push({wall:wi,t:0.5,w:3,trans:true}); sel.door=r.doors.length-1; sel.hole=null; editing=false; kpReset(); save(); renderDraw(); sheetMsg('Doorway added on the '+sideOf(r,wi)+' wall. Drag it to its spot, or tap a different wall first to move it there.'); }
+function addHole(){ const r=room(); if(!r) return; const [cx,cy]=centroid(r.pts); pushUndo('add cutout');
+  r.holes.push({x:snapTo(cx-2,0.5),y:snapTo(cy-1.25,0.5),w:4,h:2.5}); sel.hole=r.holes.length-1; sel.door=null; editing=false; save(); sizeEntry={target:'hole',step:'w'}; kpReset(); renderDraw(); }
+function sizeStep(L){ if(sizeEntry.step==='w'){ sizeEntry.w=L; sizeEntry.step='l'; kpReset(); renderDraw(); flash(); return; }
+  const W=sizeEntry.w, H=L, tgt=sizeEntry.target; sizeEntry=null;
+  if(tgt==='newroom'){ const [x0,y0]=freeSpot(); const r=addRoom([[x0,y0],[r96(x0+W),y0],[r96(x0+W),r96(y0+H)],[x0,r96(y0+H)]],[true,true,false,false]);
+    sel={room:r.id,wall:null,door:null,hole:null}; editing=false; fit(); sheetMsg(`${r.name} added · ${fmtLen(W)} × ${fmtLen(H)} = ${num(W*H,1)} sq ft. Name it and pick the flooring.`,'ok'); }
+  else { const r=room(), o=r&&r.holes[sel.hole]; if(o){ pushUndo('cutout size'); const cx=o.x+o.w/2, cy=o.y+o.h/2; o.w=r96(W); o.h=r96(H); o.x=r96(cx-W/2); o.y=r96(cy-H/2); save(); } renderDraw(); } }
+function transformRoom(r,how){ pushUndo(how+' room'); const [cx,cy]=centroid(r.pts);
+  if(how==='rotate'){ r.pts=r.pts.map(([x,y])=>[r96(cx-(y-cy)), r96(cy+(x-cx))]); r.holes.forEach(o=>{ const hx=o.x+o.w/2, hy=o.y+o.h/2, nx=cx-(hy-cy), ny=cy+(hx-cx); [o.w,o.h]=[o.h,o.w]; o.x=r96(nx-o.w/2); o.y=r96(ny-o.h/2); }); }
+  else { r.pts=r.pts.map(([x,y])=>[r96(2*cx-x),y]); r.holes.forEach(o=>{ o.x=r96(2*cx-o.x-o.w); }); }
+  save(); renderDraw(); }
+function copyRoom(r){ const c=clone(r); c.id=uid('r'); c.name=r.name+' copy'; const b=bbox(r.pts), dx=snapTo(b.w+2,0.5); c.pts=c.pts.map(([x,y])=>[x+dx,y]); c.holes.forEach(o=>o.x+=dx);
+  pushUndo('copy room'); P().rooms.push(c); sel={room:c.id,wall:null,door:null,hole:null}; editing=false; save(); fit(); }
+
+// ================= modes =================
+function setMode(m){ mode=m; draft=[]; draftKeys=new Set(); shotLast=false; hover=null; aim=null; rectPrev=null; kpReset(); if(m!=='select'){ editing=false; } renderDraw(); }
+// Free draw: where a finger at `raw` puts the next corner (90° or 45° lock, grid lengths, line up with nearby corners)
+function drawSnap(raw){
+  const px=view.w/svgW(), tol=24*px, g=gridStep(), last=draft[draft.length-1];
+  const cands=draft.concat(P().rooms.flatMap(r=>r.pts));
+  if(draft.length>=3 && Math.hypot(raw[0]-draft[0][0],raw[1]-draft[0][1])<tol*1.5) return {pt:[...draft[0]],close:true};
+  if(!last){ let best=null,bd=tol; for(const c of cands){ const d=Math.hypot(raw[0]-c[0],raw[1]-c[1]); if(d<bd){bd=d;best=c;} } return {pt:best?[...best]:[snapTo(raw[0],g),snapTo(raw[1],g)]}; }
+  const dx=raw[0]-last[0], dy=raw[1]-last[1], di=dirOf(last,raw);
+  if(ang45 && di%2===1){ const u=DIRS[di]; const len=Math.max(0,Math.round((dx*u[0]+dy*u[1])/g)*g); return {pt:[r96(last[0]+u[0]*len), r96(last[1]+u[1]*len)]}; }
+  if(ang45 ? (di===0||di===4) : Math.abs(dx)>=Math.abs(dy)){ let x=last[0]+Math.round(dx/g)*g, gx=null, bd=tol;
+    for(const c of cands){ if(c===last) continue; const d=Math.abs(raw[0]-c[0]); if(d<bd){bd=d;x=c[0];gx=c[0];} } return {pt:[r96(x),last[1]],guideX:gx}; }
+  let y=last[1]+Math.round(dy/g)*g, gy=null, bd=tol;
+  for(const c of cands){ if(c===last) continue; const d=Math.abs(raw[1]-c[1]); if(d<bd){bd=d;y=c[1];gy=c[1];} } return {pt:[last[0],r96(y)],guideY:gy}; }
+function liveUpdate(){ const el=$('live'); if(!el) return; if(!aim){ el.textContent=''; return; } if(aim.close){ el.textContent='lift to close'; return; }
+  const last=draft[draft.length-1]; if(!last){ el.textContent='lift to start here'; return; } const L=Math.hypot(aim.pt[0]-last[0],aim.pt[1]-last[1]); el.innerHTML= L>0?`<b>${fmtLen(L)}</b> ${DIRS[dirOf(last,aim.pt)][3]}`:''; }
+function placeAim(){ const a=aim; aim=null; if(!a) return; if(a.close){ hover=null; closeDraft(); return; }
+  const last=draft[draft.length-1]; if(last && Math.hypot(a.pt[0]-last[0],a.pt[1]-last[1])<1e-6){ renderDraw(); return; }
+  draft.push(a.pt); shotLast=false; kpReset(); renderDraw(); if(draft.length===2) fitIfOut(a.pt); }
+// Set the active (last) wall to length L along the direction it was tapped; with no active wall, add one turning right.
+function drawLength(L,isNudge){
+  if(!draft.length) draft.push(freeSpot());
+  if(draft.length===1 || (shotLast && !isNudge)){ const last=draft[draft.length-1]; let dir=0;
+    if(draft.length>=2) dir=(dirOf(draft[draft.length-2],last)+2)%8;
+    const u=DIRS[dir]; draft.push([r96(last[0]+u[0]*L), r96(last[1]+u[1]*L)]); }
+  else { const a=draft[draft.length-2], b=draft[draft.length-1]; const d=Math.hypot(b[0]-a[0],b[1]-a[1]); const u= d>1e-9?[(b[0]-a[0])/d,(b[1]-a[1])/d]:[1,0];
+    draftKeys.delete(segKey(a,b)); draft[draft.length-1]=[r96(a[0]+u[0]*L), r96(a[1]+u[1]*L)]; }
+  const a=draft[draft.length-2], b=draft[draft.length-1]; draftKeys.add(segKey(a,b)); shotLast=true;
+  const miss=Math.hypot(b[0]-draft[0][0],b[1]-draft[0][1]);
+  if(draft.length>=5 && miss<0.75){ draftKeys.add(segKey(a,draft[0])); return closeDraft(miss); }
+  fitIfOut(b); renderDraw(); flash(); }
+function fitIfOut(p){ const m=fs0()*2, H=view.h-sheetCover()*view.w/svgW(); if(p[0]<view.x+m||p[0]>view.x+view.w-m||p[1]<view.y+m||p[1]>view.y+H-m) fit(); }
+function undoPoint(){ if(!draft.length) return; const gone=draft.pop(); const prev=draft[draft.length-1]; if(prev) draftKeys.delete(segKey(prev,gone)); shotLast= draft.length>=2 && draftKeys.has(segKey(draft[draft.length-2],draft[draft.length-1])); renderDraw(); }
 function closeDraft(autoGap){
-  if(draft.length<3){ renderEdit('Add at least two walls before closing the room.','err'); return; }
-  let pts=draft.map(q=>[...q]); const f=pts[0]; let l=pts[pts.length-1];
-  const ex=Math.abs(f[0]-l[0]), ey=Math.abs(f[1]-l[1]);
-  let gap=typeof autoGap==='number'?autoGap:0;
+  if(draft.length<3){ sheetMsg('Draw at least two walls before closing the room.','err'); return; }
+  let pts=draft.map(q=>[...q]); const f=pts[0]; const l=pts[pts.length-1]; const ex=Math.abs(f[0]-l[0]), ey=Math.abs(f[1]-l[1]); let gap=typeof autoGap==='number'?autoGap:0;
   if(ex>1e-6 && ey>1e-6){ const n=pts.length, pl=pts[n-2], lastHoriz=Math.abs(pl[1]-l[1])<1e-6, lastVert=Math.abs(pl[0]-l[0])<1e-6;
-    if((lastHoriz||lastVert) && (lastHoriz ? ey<0.75 : ex<0.75) && n>=4){ // small gap from real-world readings: slide the last wall onto the start line
-      gap = Math.max(gap, lastHoriz ? ey : ex);
-      if(lastHoriz){ pts[n-1][1]=f[1]; pts[n-2][1]=f[1]; } else { pts[n-1][0]=f[0]; pts[n-2][0]=f[0]; } }
+    if((lastHoriz||lastVert) && (lastHoriz?ey<0.75:ex<0.75) && n>=4){ gap=Math.max(gap,lastHoriz?ey:ex); if(lastHoriz){ pts[n-1][1]=f[1]; pts[n-2][1]=f[1]; } else { pts[n-1][0]=f[0]; pts[n-2][0]=f[0]; } }
     else pts.push(lastHoriz?[l[0],f[1]]:[f[0],l[1]]); }
   pts=cleanPts(pts);
-  if(pts.length<3 || Math.abs(area(pts))<0.25){ renderEdit('That shape has no floor area. Tap Undo and try again.','err'); return; }
+  if(pts.length<3||Math.abs(area(pts))<0.25){ sheetMsg('That shape has no floor area. Tap Undo and try again.','err'); return; }
   const measured=pts.map((q,i)=>draftKeys.has(segKey(q,pts[(i+1)%pts.length])));
-  const id=uid('r'); S.rooms.push({id,name:'Room '+(S.rooms.length+1),pts,productId:S.products[0]?.id||'',base:true,measured,gap: gap>1/96?gap:0});
-  save(); setMode('select'); selectRoom(id); wallPicked=false; fit();
-  const r=selRoom(); if(!r) return; const sq=num(Math.abs(area(r.pts)),1);
-  if(gap>1/12) renderEdit(`⚠ Your readings missed the starting corner by ${fmtIn(gap)}, so the last wall was moved to close the room (${sq} sq ft). If that's more than you'd expect, reshoot the walls.`,'err');
-  else if(nextNeeded(r,-1)==null) renderEdit(`${r.name} closed · ${sq} sq ft${gap>0?` (readings met within ${fmtIn(gap)})`:''}. Name it and pick flooring above.`,'ok');
-  else renderEdit(`Room drawn. For an exact size, shoot each orange wall with the D2. Start with the ${sideOf(r,selWall)} wall.`); }
-function addSegment(L,dir){
-  if(mode!=='draw'){ selected=null; selWall=null; setMode('draw'); renderRooms(); }
-  if(!draft.length){ const all=S.rooms.flatMap(r=>r.pts); draft.push([all.length?snap(Math.max(...all.map(q=>q[0]))+3):0, all.length?snap(Math.min(...all.map(q=>q[1]))):0]); }
-  const last=draft[draft.length-1], d=DIRS[dir], np=[r96(last[0]+d[0]*L), r96(last[1]+d[1]*L)];
-  draftKeys.add(segKey(last,np)); draft.push(np); heading=(dir+2)%8;
-  const miss=Math.hypot(np[0]-draft[0][0],np[1]-draft[0][1]); if(draft.length>=5 && miss<0.75){ draftKeys.add(segKey(last,draft[0])); closeDraft(miss); return; }
-  const m=fs0()*2; if(np[0]<view.x+m||np[0]>view.x+view.w-m||np[1]<view.y+m||np[1]>view.y+view.h-m) fit(); else render();
-  renderEdit(`Wall ${draft.length-1}: ${fmtLen(L)} ${DIRS[dir][3]}. Next wall goes ${DIRS[heading][2]}. Tap an arrow to change it.`); }
-const fs0 = () => view.w/(svg.clientWidth||700)*14;
-function undoPoint(){ if(!draft.length) return; const gone=draft.pop(); const prev=draft[draft.length-1]; if(prev) draftKeys.delete(segKey(prev,gone));
-  heading = draft.length>=2 ? (dirOf(draft[draft.length-2],draft[draft.length-1])+2)%8 : 0; render(); renderEdit(); }
-function finishDraft(){ closeDraft(); }
-$('add-rect').onclick=()=>addTemplate('rect'); $('add-l').onclick=()=>addTemplate('L');
-$('mode-select').onclick=()=>setMode('select'); $('mode-draw').onclick=()=>{selected=null;selWall=null;setMode('draw');renderRooms();};
-$('undo-pt').onclick=undoPoint; $('cancel').onclick=()=>setMode('select'); $('finish').onclick=closeDraft;
+  const r=addRoom(pts,measured); r.gap=gap>1/96?gap:0; save(); setMode('select'); sel={room:r.id,wall:null,door:null,hole:null};
+  const sq=num(estimate(r).area,1);
+  if(needCount(r)){ editing=true; wallPicked=false; sel.wall=nextNeeded(r,-1); fit(); sheetMsg(`Room drawn. Shoot each orange wall for an exact size, starting with the ${sideOf(r,sel.wall)} wall.`); }
+  else { fit(); sheetMsg(gap>1/12?`⚠ Readings missed the first corner by ${fmtIn(gap)}, so the last wall was moved to close the room (${sq} sq ft). Reshoot if that seems high.`:`${r.name} closed · ${sq} sq ft. Name it and pick the flooring.`, gap>1/12?'err':'ok'); } }
 
-function pinchStart(){ const [a,b]=[...pointers.values()]; const mx=(a[0]+b[0])/2, my=(a[1]+b[1])/2;
-  if(drag&&drag.type==='room'){ const r=selRoom(); if(r) r.pts=drag.orig; }
-  if(drag&&(drag.type==='wall'||drag.type==='vertex')){ const r=selRoom(); if(r) r.pts=drag.orig; }
-  drag={type:'pinch',d0:Math.hypot(a[0]-b[0],a[1]-b[1])||1,mid:toWorld({clientX:mx,clientY:my}),v:{...view}}; render(); }
+// ================= measuring walls =================
+function applyWall(L,isNudge){ const r=room(); if(!r) return; const i=sel.wall; pushUndo('wall '+(i+1));
+  const res=setWall(r,i,L); if(res!==true){ undoStack.pop(); sheetMsg(res,'err'); return; }
+  save(); if(isNudge){ renderDraw(); return; }
+  const nx=wallPicked?null:nextNeeded(r,i); wallPicked=false;
+  if(nx==null && !needCount(r)){ renderDraw(); sheetMsg(`Wall ${i+1} set to ${fmtLen(L)}. ${r.name} is done · ${num(estimate(r).area,1)} sq ft.`,'ok'); }
+  else { sel.wall = nx ?? nextNeeded(r,-1) ?? i; renderDraw(); sheetMsg(`Wall ${i+1} set to ${fmtLen(L)}. Next: the ${sideOf(r,sel.wall)} wall.`,'ok'); }
+  flash(); }
+
+// ================= pointer input =================
+function pinchStart(){ const [a,b]=[...pointers.values()]; const r=room();
+  if(drag&&drag.orig&&r) r.pts=drag.orig; if(drag&&drag.horig&&r) Object.assign(r.holes[drag.hi],drag.horig); if(drag&&drag.dorig!=null&&r) r.doors[drag.di].t=drag.dorig;
+  aim=null; hover=null; rectPrev=null;
+  drag={type:'pinch',d0:Math.hypot(a[0]-b[0],a[1]-b[1])||1,mid:toWorld((a[0]+b[0])/2,(a[1]+b[1])/2),v:{...view}}; renderCanvas(); }
 svg.addEventListener('pointerdown',e=>{
-  pointers.set(e.pointerId,[e.clientX,e.clientY]);
-  if(pointers.size===2){ aim=null; hover=null; pinchStart(); return; }
-  if(pointers.size>2) return;
-  const w=toWorld(e);
-  if(mode==='draw'){ svg.setPointerCapture(e.pointerId); aim=drawSnap(w); hover=aim.pt; drag={type:'aim'}; render(); liveUpdate(); return; }
-  svg.setPointerCapture(e.pointerId);
-  const t=e.target, vi=t.dataset.vi, rid=t.dataset.room, wi=t.dataset.wall;
-  if(vi!==undefined){ const r=selRoom(); drag={type:'vertex',i:+vi,orig:r.pts.map(q=>[...q])}; }
-  else if(rid && wi!==undefined){ selectRoom(rid,+wi); const r=selRoom(); drag={type:'wall',i:+wi,start:w,orig:r.pts.map(q=>[...q]),moved:false}; return; }
-  else if(rid){ const r=S.rooms.find(x=>x.id===rid); if(selected!==rid) selectRoom(rid); drag={type:'room',start:w,orig:r.pts.map(q=>[...q]),moved:false}; }
-  else { drag={type:'pan',sx:e.clientX,sy:e.clientY,v:{...view},scale:svg.getScreenCTM().a,moved:false}; }
-  render();
-});
+  pointers.set(e.pointerId,[e.clientX,e.clientY]); svg.setPointerCapture(e.pointerId);
+  if(pointers.size===2){ pinchStart(); return; } if(pointers.size>2) return;
+  const w=toWorld(e.clientX,e.clientY), t=e.target, r=room();
+  if(mode==='draw'){ aim=drawSnap(w); hover=aim.pt; drag={type:'aim'}; renderCanvas(); liveUpdate(); return; }
+  if(mode==='rect'){ const g=gridStep(); const p0=[snapTo(w[0],g),snapTo(w[1],g)]; drag={type:'rect',p0}; rectPrev=[...p0,...p0]; renderCanvas(); return; }
+  if(sizeEntry){ drag={type:'pan',sx:e.clientX,sy:e.clientY,v:{...view},moved:false,keep:true}; return; }
+  if(t.dataset.door!=null&&r){ sel.door=+t.dataset.door; sel.hole=null; editing=false; drag={type:'door',di:sel.door,dorig:r.doors[sel.door].t,moved:false}; kpReset(); renderDraw(); return; }
+  if(t.dataset.hole!=null&&r&&t.dataset.hroom===r.id){ sel.hole=+t.dataset.hole; sel.door=null; editing=false; const o=r.holes[sel.hole]; drag={type:'hole',hi:sel.hole,horig:{...o},start:w,moved:false}; renderDraw(); return; }
+  if(t.dataset.vi!=null&&r){ drag={type:'vertex',i:+t.dataset.vi,orig:r.pts.map(q=>[...q]),moved:false,start:[e.clientX,e.clientY]}; return; }
+  if(t.dataset.wall!=null&&r){ const i=+t.dataset.wall;
+    if(sel.door!=null){ pushUndo('move doorway'); r.doors[sel.door].wall=i; r.doors[sel.door].t=0.5; save(); renderDraw(); drag={type:'none'}; return; }
+    sel.wall=i; editing=true; wallPicked=true; sel.door=null; sel.hole=null; kpReset(); renderDraw(); drag={type:'wall',i,start:w,orig:r.pts.map(q=>[...q]),moved:false}; return; }
+  if(t.dataset.room){ const id=t.dataset.room; if(sel.room!==id){ sel={room:id,wall:null,door:null,hole:null}; editing=false; renderDraw(); }
+    else if(sel.door!=null||sel.hole!=null){ sel.door=null; sel.hole=null; renderDraw(); }
+    const rr=room(); drag={type:'room',start:w,orig:rr.pts.map(q=>[...q]),holes:clone(rr.holes),moved:false,sx:e.clientX,sy:e.clientY}; return; }
+  drag={type:'pan',sx:e.clientX,sy:e.clientY,v:{...view},moved:false}; });
 svg.addEventListener('pointermove',e=>{
   if(pointers.has(e.pointerId)) pointers.set(e.pointerId,[e.clientX,e.clientY]);
   if(drag&&drag.type==='pinch'){ if(pointers.size<2) return; const [a,b]=[...pointers.values()]; const d=Math.hypot(a[0]-b[0],a[1]-b[1])||1;
-    const nw=Math.min(300,Math.max(6,drag.v.w*drag.d0/d)), k=nw/drag.v.w, m=drag.mid, rc=svg.getBoundingClientRect(), sc=nw/(svg.clientWidth||700);
-    const cx=(a[0]+b[0])/2-rc.left, cy=(a[1]+b[1])/2-rc.top; view={x:m[0]-cx*sc, y:m[1]-cy*sc, w:nw, h:drag.v.h*k}; render(); return; }
-  if(mode==='draw'){ if((drag&&drag.type==='aim') || (e.pointerType==='mouse'&&!drag)){ aim=drawSnap(toWorld(e)); hover=aim.pt; render(); liveUpdate(); } return; }
+    const nw=Math.min(400,Math.max(5,drag.v.w*drag.d0/d)), rc=svg.getBoundingClientRect(), sc=nw/svgW(), cx=(a[0]+b[0])/2-rc.left, cy=(a[1]+b[1])/2-rc.top;
+    view.w=nw; view.x=drag.mid[0]-cx*sc; view.y=drag.mid[1]-cy*sc; renderCanvas(); return; }
+  if(mode==='draw'){ if((drag&&drag.type==='aim')||(e.pointerType==='mouse'&&!drag)){ aim=drawSnap(toWorld(e.clientX,e.clientY)); hover=aim.pt; renderCanvas(); liveUpdate(); } return; }
   if(!drag||drag.type==='none') return;
-  if(drag.type==='pan'){ const dx=(e.clientX-drag.sx)/drag.scale, dy=(e.clientY-drag.sy)/drag.scale; if(Math.abs(dx)+Math.abs(dy)>0.2) drag.moved=true; view.x=drag.v.x-dx; view.y=drag.v.y-dy; render(); return; }
-  const w=toWorld(e); const r=S.rooms.find(x=>x.id===selected); if(!r) return;
-  if(drag.type==='vertex'){ const g=gridStep(), o=drag.orig, n=o.length, i=drag.i, a=(i-1+n)%n, b=(i+1)%n, p=o.map(q=>[...q]);
-    p[i]=[r96(Math.round(w[0]/g)*g), r96(Math.round(w[1]/g)*g)];
-    for(const k of [a,b]){ if(Math.abs(o[k][1]-o[i][1])<1e-6) p[k]=[o[k][0],p[i][1]]; else if(Math.abs(o[k][0]-o[i][0])<1e-6) p[k]=[p[i][0],o[k][1]]; }
-    r.pts=p; }
-  else if(drag.type==='wall'){ const o=drag.orig, i=drag.i, j=(i+1)%o.length, a=axisOf(o,i); if(!a||a.ax==='d') return;
-    const px=view.w/(svg.clientWidth||700), g=gridStep(), d = a.ax==='x' ? w[1]-drag.start[1] : w[0]-drag.start[0];
-    if(!drag.moved && Math.abs(d)<10*px) return; drag.moved=true; const dd=Math.round(d/g)*g, p=o.map(q=>[...q]);
-    if(a.ax==='x'){ p[i][1]=r96(o[i][1]+dd); p[j][1]=r96(o[j][1]+dd); } else { p[i][0]=r96(o[i][0]+dd); p[j][0]=r96(o[j][0]+dd); }
-    r.pts=p; }
-  else { const dx=snap(w[0]-drag.start[0]), dy=snap(w[1]-drag.start[1]); if(dx||dy) drag.moved=true; r.pts=drag.orig.map(q=>[q[0]+dx,q[1]+dy]); }
-  render();
-});
-function pointerEnd(e){ pointers.delete(e.pointerId); if(!drag) return;
-  if(drag.type==='pinch'){ if(pointers.size===0) drag=null; return; }
-  if(drag.type==='aim'){ drag=null; placeAim(); if(e.pointerType!=='mouse'){ hover=null; render(); } return; }
-  if(drag.type==='vertex'||(drag.type==='wall'&&drag.moved)){ const r=selRoom(); if(r){ r.pts.forEach((_,k)=>{ const a=axisOf(r.pts,k), b=axisOf(drag.orig,k); if(!a||!b||Math.abs(a.L-b.L)>1/192) r.measured[k]=false; }); } save(); renderRooms(); renderEdit(); drag=null; return; }
-  if(drag.type==='pan' && !drag.moved && selected){ selected=null; selWall=null; renderRooms(); render(); renderEdit(); }
-  if(drag.type==='vertex'||drag.type==='room'){ save(); renderRooms(); if(drag.type==='vertex') renderEdit(); }
-  drag=null; }
+  const w=toWorld(e.clientX,e.clientY), r=room(), g=gridStep(), px=view.w/svgW();
+  if(drag.type==='rect'){ rectPrev=[...drag.p0,snapTo(w[0],g),snapTo(w[1],g)]; renderCanvas(); return; }
+  if(drag.type==='pan'){ const dx=(e.clientX-drag.sx)*px, dy=(e.clientY-drag.sy)*px; if(Math.abs(e.clientX-drag.sx)+Math.abs(e.clientY-drag.sy)>6) drag.moved=true; view.x=drag.v.x-dx; view.y=drag.v.y-dy; renderCanvas(); return; }
+  if(!r) return;
+  if(drag.type==='door'){ const d=r.doors[drag.di], gm=doorGeom(r,d); if(!gm) return; const along=(w[0]-gm.a0[0])*gm.ux+(w[1]-gm.a0[1])*gm.uy; d.t=Math.min(1,Math.max(0,snapTo(along,1/12)/gm.L)); drag.moved=true; renderCanvas(); return; }
+  if(drag.type==='hole'){ const o=r.holes[drag.hi]; const dx=snapTo(w[0]-drag.start[0],g), dy=snapTo(w[1]-drag.start[1],g); if(dx||dy) drag.moved=true; o.x=r96(drag.horig.x+dx); o.y=r96(drag.horig.y+dy); renderCanvas(); return; }
+  if(drag.type==='vertex'){ if(!drag.moved && Math.hypot(e.clientX-drag.start[0],e.clientY-drag.start[1])<6) return; drag.moved=true;
+    const o=drag.orig, n=o.length, i=drag.i, a=(i-1+n)%n, b=(i+1)%n, p=o.map(q=>[...q]); p[i]=[snapTo(w[0],g),snapTo(w[1],g)];
+    for(const k of [a,b]){ if(Math.abs(o[k][1]-o[i][1])<1e-6) p[k]=[o[k][0],p[i][1]]; else if(Math.abs(o[k][0]-o[i][0])<1e-6) p[k]=[p[i][0],o[k][1]]; } r.pts=p; renderCanvas(); return; }
+  if(drag.type==='wall'){ const o=drag.orig, i=drag.i, j=(i+1)%o.length, ax=axisOf(o,i); if(!ax||ax.ax==='d') return; const d= ax.ax==='x'?w[1]-drag.start[1]:w[0]-drag.start[0];
+    if(!drag.moved && Math.abs(d)<10*px) return; drag.moved=true; const dd=snapTo(d,g), p=o.map(q=>[...q]);
+    if(ax.ax==='x'){ p[i][1]=r96(o[i][1]+dd); p[j][1]=r96(o[j][1]+dd); } else { p[i][0]=r96(o[i][0]+dd); p[j][0]=r96(o[j][0]+dd); } r.pts=p; renderCanvas(); return; }
+  if(drag.type==='room'){ if(!drag.moved && Math.abs(e.clientX-drag.sx)+Math.abs(e.clientY-drag.sy)<8) return; const dx=snapTo(w[0]-drag.start[0],0.5), dy=snapTo(w[1]-drag.start[1],0.5); drag.moved=true;
+    r.pts=drag.orig.map(q=>[r96(q[0]+dx),r96(q[1]+dy)]); r.holes.forEach((o,k)=>{ o.x=r96(drag.holes[k].x+dx); o.y=r96(drag.holes[k].y+dy); }); renderCanvas(); } });
+function pointerEnd(e){ pointers.delete(e.pointerId); if(!drag) return; const d=drag;
+  if(d.type==='pinch'){ if(pointers.size===0) drag=null; return; }
+  drag=null; const r=room();
+  if(d.type==='aim'){ placeAim(); if(e.pointerType!=='mouse'){ hover=null; renderCanvas(); } return; }
+  if(d.type==='rect'){ const [x1,y1,x2,y2]=rectPrev||[0,0,0,0]; rectPrev=null; const x=Math.min(x1,x2), y=Math.min(y1,y2), w=Math.abs(x2-x1), h=Math.abs(y2-y1);
+    if(w<1||h<1){ renderDraw(); sheetMsg('Drag farther to draw a room at least 1 ft across.','err'); return; }
+    const nr=addRoom([[x,y],[x+w,y],[x+w,y+h],[x,y+h]],[false,false,false,false]); mode='select'; sel={room:nr.id,wall:0,door:null,hole:null}; editing=true; wallPicked=false; kpReset(); renderDraw(); sheetMsg('Now shoot the top wall, then the right wall. The other two follow.'); return; }
+  if(d.type==='pan'){ if(!d.moved && !d.keep && sel.room){ sel={room:null,wall:null,door:null,hole:null}; editing=false; renderDraw(); } return; }
+  if(!r) return;
+  if((d.type==='vertex'||d.type==='wall')&&d.moved){ undoStack.push({rooms:clone(P().rooms.map(x=>x===r?Object.assign(clone(x),{pts:d.orig}):x)),label:'reshape room'}); $('undo-act').hidden=false;
+    r.pts.forEach((_,k)=>{ const a=axisOf(r.pts,k), b=axisOf(d.orig,k); if(!a||!b||Math.abs(a.L-b.L)>1/192) r.measured[k]=false; }); save(); renderDraw(); return; }
+  if(d.type==='room'&&d.moved){ save(); renderDraw(); return; }
+  if((d.type==='door'||d.type==='hole')&&d.moved){ save(); renderDraw(); } }
 svg.addEventListener('pointerup',pointerEnd); svg.addEventListener('pointercancel',pointerEnd);
-svg.addEventListener('pointerleave',e=>{ if(mode==='draw'&&e.pointerType==='mouse'&&!drag){ hover=null; aim=null; render(); liveUpdate(); } });
-function zoom(f,cx,cy){ cx??=view.x+view.w/2; cy??=view.y+view.h/2; const nw=Math.min(300,Math.max(6,view.w*f)); const k=nw/view.w; view={x:cx-(cx-view.x)*k,y:cy-(cy-view.y)*k,w:nw,h:view.h*k}; render(); }
-svg.addEventListener('wheel',e=>{ e.preventDefault(); const w=toWorld(e); zoom(e.deltaY>0?1.12:1/1.12,w[0],w[1]); },{passive:false});
-$('zin').onclick=()=>zoom(1/1.25); $('zout').onclick=()=>zoom(1.25);
-function fit(){ const pts=S.rooms.flatMap(r=>r.pts).concat(draft); if(!pts.length){view={x:-3,y:-3,w:42,h:34};render();return;} const b=bbox(pts); const r=svg.clientWidth/Math.max(1,svg.clientHeight)||1.3;
-  const m=Math.max(4,Math.max(b.w,b.h)*0.18); let w=b.w+m*2, h=b.h+m*2; if(w/h<r) w=h*r; else h=w/r; view={x:b.x+b.w/2-w/2,y:b.y+b.h/2-h/2,w,h}; render(); }
-$('fit').onclick=fit;
-document.addEventListener('keydown',e=>{ if(e.target.matches('input,select,textarea')) return;
-  if(e.key==='Escape'&&mode==='draw') setMode('select');
-  if(e.key==='Enter'&&mode==='draw') closeDraft();
-  if((e.key==='z'&&(e.metaKey||e.ctrlKey))&&mode==='draw'){ e.preventDefault(); undoPoint(); }
-  if((e.key==='Delete'||e.key==='Backspace')&&selected&&mode==='select'){ e.preventDefault(); delRoom(selected); } });
+svg.addEventListener('pointerleave',e=>{ if(mode==='draw'&&e.pointerType==='mouse'&&!drag){ hover=null; aim=null; renderCanvas(); liveUpdate(); } });
+svg.addEventListener('wheel',e=>{ e.preventDefault(); const w=toWorld(e.clientX,e.clientY), f=e.deltaY>0?1.12:1/1.12, nw=Math.min(400,Math.max(5,view.w*f)), k=nw/view.w; view.x=w[0]-(w[0]-view.x)*k; view.y=w[1]-(w[1]-view.y)*k; view.w=nw; renderCanvas(); },{passive:false});
 
-
-let lastDel=null, tTimer;
-function delRoom(id){ const i=S.rooms.findIndex(r=>r.id===id); if(i<0) return; lastDel={room:S.rooms[i],i}; S.rooms.splice(i,1); if(selected===id){ selected=null; selWall=null; } lastWall=null; save(); all();
-  $('toast-msg').textContent=`Deleted ${lastDel.room.name}`; $('toast').hidden=false; clearTimeout(tTimer); tTimer=setTimeout(()=>$('toast').hidden=true,5000); }
-$('toast-undo').onclick=()=>{ if(lastDel){ S.rooms.splice(lastDel.i,0,lastDel.room); const id=lastDel.room.id; lastDel=null; save(); selectRoom(id); } $('toast').hidden=true; };
-
-$('rooms').addEventListener('input',e=>{ const card=e.target.closest('.room'); if(!card) return; const r=S.rooms.find(x=>x.id===card.dataset.id); const f=e.target.dataset.f; if(!f) return;
-  r[f] = e.target.type==='checkbox'? e.target.checked : e.target.value; save(); render(); if(f!=='name') renderRooms(); if(r.id===selected) renderEdit(); });
-$('rooms').addEventListener('click',e=>{ const d=e.target.closest('[data-del]'); if(d){ delRoom(d.dataset.del); return; }
-  const card=e.target.closest('.room'); if(card && card.dataset.id!==selected && !e.target.matches('input,select')) selectRoom(card.dataset.id); });
-$('rooms').addEventListener('focusin',e=>{ const card=e.target.closest('.room'); if(card&&card.dataset.id!==selected){ selected=card.dataset.id; selWall=null; render(); renderEdit(); document.querySelectorAll('.room').forEach(c=>c.classList.toggle('sel',c.dataset.id===selected)); } });
-
-const eb=$('editbar');
-eb.addEventListener('click',e=>{
-  if(mode==='draw'){ const d=e.target.closest('[data-dir]');
-    if(d){ heading=+d.dataset.dir; eb.querySelectorAll('.dir').forEach(b=>b.classList.toggle('on',+b.dataset.dir===heading)); return; }
-    if(e.target.id==='eb-add'){ const L=readEditLen(); if(!(L>0)){ renderEdit('Type a length first, like 12 ft 6 in.','err'); return; } addSegment(L,heading); return; }
-    if(e.target.id==='eb-dundo'){ undoPoint(); return; }
-    if(e.target.id==='eb-ang'){ ang45=!ang45; if(!ang45&&heading%2) heading=(heading+7)%8; renderEdit(ang45?'45° walls on. Drag at an angle, or use the corner arrows.':'Walls lock to 90° again.'); return; }
-    if(e.target.id==='eb-close'){ closeDraft(); return; }
-    if(e.target.id==='eb-dcancel'){ setMode('select'); return; }
-    return; }
-  const r=selRoom(); if(!r) return; const c=e.target.closest('[data-chip]');
-  if(c){ selWall=+c.dataset.chip; wallPicked=true; render(); renderEdit(); return; }
-  if(e.target.id==='eb-set'){ const L=readEditLen(); if(!(L>0)){ renderEdit('Type a length first, like 12 ft 6 in.','err'); return; } applyWall(L); return; }
-  if(e.target.id==='eb-undo'&&lastWall){ const u=lastWall; const rr=S.rooms.find(x=>x.id===u.id); if(rr){ rr.pts=u.pts; rr.measured=u.measured; selWall=u.wall; } lastWall=null; save(); render(); renderRooms(); renderEdit('Undone.'); return; }
-  if(e.target.id==='eb-del') delRoom(r.id); });
-eb.addEventListener('input',e=>{ const r=selRoom(); if(!r) return; if(e.target.id==='eb-name'){ r.name=e.target.value; save(); render(); const li=$('rn-'+r.id); if(li) li.value=r.name; } });
-eb.addEventListener('change',e=>{ const r=selRoom(); if(!r) return; if(e.target.id==='eb-prod'){ r.productId=e.target.value; save(); render(); renderRooms(); } });
-eb.addEventListener('keydown',e=>{ if(e.key!=='Enter') return;
-  if(e.target.id==='eb-ft'&&$('eb-in')&&!$('eb-in').value&&!/['′"″a-z]/i.test(e.target.value)){ e.preventDefault(); $('eb-in').focus(); return; }
-  if(e.target.id==='eb-ft'||e.target.id==='eb-in'){ e.preventDefault(); ($('eb-set')||$('eb-add')).click(); } });
-$('m-unit').addEventListener('change',()=>renderEdit());
-$('new-job').onclick=()=>{ $('confirm').hidden=false; };
-$('cf-no').onclick=()=>{ $('confirm').hidden=true; };
-$('cf-yes').onclick=()=>{ $('confirm').hidden=true; S.rooms=[]; S.job={customer:'',address:'',tax:S.job.tax,markup:S.job.markup,no:'FP-'+String(Date.now()).slice(-5)};
-  selected=null; selWall=null; lastWall=null; draft=[]; save(); document.getElementById('tab-plan').click(); };
-$('products').addEventListener('input',e=>{ const t=e.target; if(!t.dataset.pid) return; const p=prod(t.dataset.pid); const k=t.dataset.k;
-  p[k] = (k==='name'||k==='color')? t.value : (+t.value||0); save(); if(k==='color') t.closest('.prod').style.setProperty('--c',t.value); });
-$('products').addEventListener('click',e=>{ const b=e.target.closest('[data-pdel]'); if(!b||b.disabled) return; S.products=S.products.filter(p=>p.id!==b.dataset.pdel); save(); renderProducts(); });
-function addProduct(kind){ const color=COLORS[S.products.length%COLORS.length];
-  S.products.push(kind==='roll'? {id:uid('p'),name:'New carpet',kind,rollWidth:12,price:22,pad:5,waste:5,labor:0.9,color} : {id:uid('p'),name:'New boxed product',kind,coverage:20,price:55,waste:10,labor:3,color}); save(); renderProducts(); }
+// ================= products =================
+function renderProducts(){ const pj=P();
+  $('products').innerHTML=DB.products.map(p=>{ const used=DB.projects.reduce((c,j)=>c+j.rooms.filter(r=>r.productId===p.id).length,0);
+    const f=(k,l,step)=>`<label class="f">${l}<input type="number" inputmode="decimal" step="${step}" min="0" id="pf-${p.id}-${k}" data-pid="${p.id}" data-k="${k}" value="${p[k]??0}"></label>`;
+    return `<div class="card prod" style="--c:${p.color}"><div class="srow" style="justify-content:space-between"><span class="kind">${p.kind==='roll'?'Carpet · priced per sq yd':'Boxed · priced per box'}</span><span class="kind">${used} room${used===1?'':'s'}</span></div>
+      <label class="f">Name<input id="pf-${p.id}-name" data-pid="${p.id}" data-k="name" value="${esc(p.name)}"></label>
+      <div class="srow">${p.kind==='roll'?f('rollWidth','Roll width (ft)',0.5)+f('price','Material $/sq yd',0.25)+f('pad','Pad $/sq yd',0.25):f('coverage','Sq ft per box',0.01)+f('price','$ per box',0.5)}</div>
+      <div class="srow">${f('waste','Waste %',1)}${f('labor','Labor $/sq ft',0.05)}<label class="f" style="flex:0 0 60px;min-width:60px">Color<input type="color" id="pf-${p.id}-color" data-pid="${p.id}" data-k="color" value="${p.color}" style="padding:2px;height:42px"></label></div>
+      <button class="btn ghost danger sm" data-pdel="${p.id}"${used?' disabled title="Used in a room"':''}>${used?'In use':'Remove'}</button></div>`; }).join(''); }
+$('products').addEventListener('input',e=>{ const t=e.target; if(!t.dataset.pid) return; const p=prod(t.dataset.pid), k=t.dataset.k; p[k]=(k==='name'||k==='color')?t.value:(+t.value||0); save(); if(k==='color') t.closest('.prod').style.setProperty('--c',t.value); });
+$('products').addEventListener('click',e=>{ const b=e.target.closest('[data-pdel]'); if(!b||b.disabled) return; DB.products=DB.products.filter(p=>p.id!==b.dataset.pdel); save(); renderProducts(); });
+function addProduct(kind){ const color=COLORS[DB.products.length%COLORS.length];
+  DB.products.push(kind==='roll'?{id:uid('p'),name:'New carpet',kind,rollWidth:12,price:22,pad:5,waste:5,labor:0.9,color}:{id:uid('p'),name:'New boxed product',kind,coverage:20,price:55,waste:10,labor:3,color}); save(); renderProducts(); }
 $('add-roll').onclick=()=>addProduct('roll'); $('add-box').onclick=()=>addProduct('box');
-$('bb-price').oninput=e=>{S.baseboard.price=+e.target.value||0;save();}; $('bb-labor').oninput=e=>{S.baseboard.labor=+e.target.value||0;save();};
 
-[['j-customer','customer'],['j-address','address'],['j-tax','tax'],['j-markup','markup']].forEach(([id,k])=>{ $(id).addEventListener('input',e=>{ S.job[k]=e.target.type==='number'?(+e.target.value||0):e.target.value; save();
-  const a=document.activeElement; renderQuote(); a&&a.focus(); }); });
-$('reset').onclick=()=>{ S=sample(); normalize(); selected=null; selWall=null; lastWall=null; save(); renderQuote(); all(); };
-$('copy-quote').onclick=async e=>{ const q=quote(); const j=S.job;
-  let t=`${j.customer?'Estimate for '+j.customer:'Flooring estimate'} (${j.no})\n${j.address}\n\n`;
-  q.lines.forEach(l=>{ t+=`${l.p.name} — ${l.p.kind==='roll'?num(l.qty,1)+' sq yd':l.qty+' boxes'} (${l.rooms.join(', ')}): ${money((l.mat+l.lab)*q.mk)}\n`; });
-  if(q.bb.lf>0) t+=`Baseboard — ${q.bb.pieces} × 8′ pieces installed: ${money((q.bb.mat+q.bb.lab)*q.mk)}\n`;
-  t+=`\nMaterials ${money(q.mat)}\nLabor ${money(q.lab)}\nTax ${money(q.tax)}\nTOTAL ${money(q.total)}\n`;
-  const b=e.currentTarget; try{ await navigator.clipboard.writeText(t); b.textContent='Copied'; }catch(err){ b.textContent='Copy blocked here'; } setTimeout(()=>b.textContent='Copy quote as text',1800); };
+// ================= worksheet =================
+function warnings(pj){ const rough=pj.rooms.filter(r=>needCount(r)), gappy=pj.rooms.filter(r=>r.gap>1/12), none=pj.rooms.filter(r=>!prod(r.productId)); const n=[];
+  if(rough.length) n.push(`${rough.map(r=>r.name).join(', ')} ${rough.length>1?'have':'has'} walls that weren't measured, so ${rough.length>1?'those sizes are':'that size is'} only a sketch.`);
+  if(gappy.length) n.push(`${gappy.map(r=>`${r.name} (${fmtIn(r.gap)})`).join(', ')} closed with a gap.`);
+  if(none.length) n.push(`${none.map(r=>r.name).join(', ')} ${none.length>1?'have':'has'} no flooring picked.`); return n; }
+function renderWorksheet(){ const pj=P(), q=quote(pj), w=warnings(pj);
+  $('ws-warn').hidden=!w.length; $('ws-warn').textContent=w.length?'Check before quoting: '+w.join(' '):'';
+  $('ws-body').innerHTML = q.lines.length? q.lines.map(l=>`<tr><td>${l.color?`<span class="sw" style="--c:${l.color}"></span>`:''}${esc(l.label)}${l.sub?`<span class="sub">${esc(l.sub)}</span>`:''}</td><td class="n">${esc(l.qty)} ${esc(l.unit)}</td><td class="n ml">${money(l.mat)}</td><td class="n ml">${money(l.lab)}</td><td class="n">${money(l.mat+l.lab)}</td></tr>`).join('')
+    : '<tr><td colspan="5" class="smsg">Draw rooms and pick their flooring to build the worksheet.</td></tr>';
+  $('ws-markup').value=pj.markup; $('ws-tax').value=pj.tax;
+  $('ws-totals').innerHTML=`<div><span>Materials</span><span>${money(q.mat)}</span></div><div><span>Labor</span><span>${money(q.lab)}</span></div><div><span>Tax (${+pj.tax||0}%)</span><span>${money(q.tax)}</span></div><div class="grand"><span>Total</span><span>${money(q.total)}</span></div>`;
+  $('extras').innerHTML = pj.extras.length? pj.extras.map(x=>`<div class="xrow" data-xid="${x.id}"><label class="f nm">${x.kind==='stairs'?'Stairs':'Item'}<input data-xk="name" id="x-${x.id}-name" value="${esc(x.name)}"></label>
+      <label class="f">${x.kind==='stairs'?'Steps':'Qty'}<input data-xk="qty" id="x-${x.id}-qty" type="number" inputmode="decimal" min="0" step="1" value="${x.qty}"></label>
+      <label class="f">Material $ each<input data-xk="price" id="x-${x.id}-price" type="number" inputmode="decimal" min="0" step="0.5" value="${x.price}"></label>
+      <label class="f">Labor $ each<input data-xk="labor" id="x-${x.id}-labor" type="number" inputmode="decimal" min="0" step="0.5" value="${x.labor}"></label>
+      <button class="btn ghost danger sm" data-xdel="${x.id}" aria-label="Remove ${esc(x.name)}">${ICON.trash}</button></div>`).join('') : '<p class="smsg" style="margin:0">Add stairs, removal of old flooring, furniture moving or anything else you charge for.</p>'; }
+$('extras').addEventListener('change',e=>{ const row=e.target.closest('[data-xid]'); if(!row) return; const x=P().extras.find(z=>z.id===row.dataset.xid), k=e.target.dataset.xk; x[k]= k==='name'?e.target.value:(+e.target.value||0); save(); renderWorksheet(); });
+$('extras').addEventListener('click',e=>{ const b=e.target.closest('[data-xdel]'); if(!b) return; P().extras=P().extras.filter(x=>x.id!==b.dataset.xdel); save(); renderWorksheet(); });
+$('add-stairs').onclick=()=>{ P().extras.push({id:uid('x'),kind:'stairs',name:'Stairs',qty:13,unit:'step',price:12,labor:28}); save(); renderWorksheet(); };
+$('add-item').onclick=()=>{ P().extras.push({id:uid('x'),kind:'item',name:'Remove and haul old flooring',qty:1,unit:'job',price:0,labor:150}); save(); renderWorksheet(); };
+$('ws-markup').addEventListener('change',e=>{ P().markup=+e.target.value||0; save(); renderWorksheet(); });
+$('ws-tax').addEventListener('change',e=>{ P().tax=+e.target.value||0; save(); renderWorksheet(); });
 
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{ const v=b.dataset.view;
-  document.querySelectorAll('nav button').forEach(x=>x.setAttribute('aria-selected',x===b));
-  document.querySelectorAll('.view').forEach(s=>s.hidden=s.id!=='view-'+v);
-  if(v==='products') renderProducts(); if(v==='quote') renderQuote(); if(v==='plan'){ all(); requestAnimationFrame(fit); } });
+// ================= proposal =================
+function renderProposal(){ const pj=P(), q=quote(pj), S=DB.settings, d=new Date();
+  const rooms=pj.rooms.map(r=>{ const e=estimate(r); return `<tr><td>${esc(r.name)}</td><td>${e.p?esc(e.p.name):'—'}</td><td class="n">${num(e.area,1)} sq ft</td></tr>`; }).join('');
+  $('proposal').innerHTML=`<div class="meta"><div><h1>${esc(S.biz||'Flooring proposal')}</h1>${S.phone?esc(S.phone):''}</div><div style="text-align:right">Proposal ${esc(pj.no)}<br>${d.toLocaleDateString()}</div></div>
+    <div class="meta"><div><b>Prepared for</b><br>${esc(pj.customer||'—')}<br>${esc(pj.address||'')}${pj.phone?'<br>'+esc(pj.phone):''}${pj.email?'<br>'+esc(pj.email):''}</div><div style="text-align:right"><b>Total floor area</b><br>${num(q.area,1)} sq ft</div></div>
+    ${rooms?`<div class="tbl"><table><thead><tr><th>Room</th><th>Flooring</th><th class="n">Area</th></tr></thead><tbody>${rooms}</tbody></table></div>`:''}
+    <div class="tbl"><table><thead><tr><th>Description</th><th class="n">Qty</th><th class="n">Price</th></tr></thead><tbody>${q.lines.map(l=>`<tr><td>${esc(l.label)}</td><td class="n">${esc(l.qty)} ${esc(l.unit)}</td><td class="n">${money(l.mat+l.lab)}</td></tr>`).join('')}</tbody></table></div>
+    <div class="totals" style="max-width:320px;margin-left:auto;width:100%"><div><span>Subtotal</span><span>${money(q.mat+q.lab)}</span></div><div><span>Tax</span><span>${money(q.tax)}</span></div><div class="grand"><span>Total</span><span>${money(q.total)}</span></div></div>
+    ${S.terms?`<div class="terms">${esc(S.terms)}</div>`:''}
+    <div class="sig"><div>Customer signature &amp; date</div><div>${esc(S.biz||'Contractor')} signature &amp; date</div></div>`;
+  $('print-prop').hidden = window.self!==window.top; }
+$('print-prop').onclick=()=>{ try{ window.print(); }catch(e){} };
+$('copy-prop').onclick=async e=>{ const pj=P(), q=quote(pj), S=DB.settings;
+  let t=`${S.biz||'Flooring proposal'}${S.phone?' · '+S.phone:''}\nProposal ${pj.no} · ${new Date().toLocaleDateString()}\nFor: ${pj.customer||''}${pj.address?', '+pj.address:''}\n\n`;
+  pj.rooms.forEach(r=>{ const e=estimate(r); t+=`${r.name}: ${num(e.area,1)} sq ft${e.p?' · '+e.p.name:''}\n`; }); t+='\n';
+  q.lines.forEach(l=>{ t+=`${l.label} (${l.qty} ${l.unit}): ${money(l.mat+l.lab)}\n`; });
+  t+=`\nSubtotal ${money(q.mat+q.lab)}\nTax ${money(q.tax)}\nTOTAL ${money(q.total)}\n${S.terms?'\n'+S.terms+'\n':''}`;
+  const b=e.currentTarget; try{ await navigator.clipboard.writeText(t); b.textContent='Copied'; }catch(err){ b.textContent='Copy blocked here'; } setTimeout(()=>b.textContent='Copy as text',1800); };
 
-// ---- directions for drawing by length: [dx, dy, word, arrow]
-const D45=Math.SQRT1_2;
-const DIRS=[[1,0,'right','→'],[D45,D45,'down-right','↘'],[0,1,'down','↓'],[-D45,D45,'down-left','↙'],[-1,0,'left','←'],[-D45,-D45,'up-left','↖'],[0,-1,'up','↑'],[D45,-D45,'up-right','↗']];
-let ang45=false;
-let heading=0;
-function parseLen(s,unit){ s=String(s).trim().toLowerCase().replace(/,/g,'.'); if(!s) return NaN; let m;
-  if(m=s.match(/^([\d.]+)\s*mm$/)) return +m[1]/304.8;
-  if(m=s.match(/^([\d.]+)\s*cm$/)) return +m[1]/30.48;
-  if(m=s.match(/^([\d.]+)\s*m$/)) return +m[1]*3.28084;
-  if(m=s.match(/^(\d+)\s*(?:'|′|ft)\s*-?\s*(\d+(?:\.\d+)?)?\s*(?:(\d+)\s*\/\s*(\d+))?\s*(?:"|″|in)?$/)) return +m[1]+((+m[2]||0)+(m[3]?m[3]/m[4]:0))/12;
-  if(m=s.match(/^(\d+(?:\.\d+)?)\s*(?:(\d+)\s*\/\s*(\d+))?\s*(?:"|″|in)$/)) return (+m[1]+(m[2]?m[2]/m[3]:0))/12;
-  if(m=s.match(/^([\d.]+)$/)){ const v=+m[1]; return unit==='m'?v*3.28084:unit==='in'?v/12:v; }
-  return NaN; }
+// ================= info / settings =================
+const INFO=[['i-name','name'],['i-customer','customer'],['i-phone','phone'],['i-email','email'],['i-address','address'],['i-notes','notes']];
+const SETS=[['s-biz','biz'],['s-phone','phone'],['s-bbp','bbPrice',1],['s-bbl','bbLabor',1],['s-trp','trPrice',1],['s-trl','trLabor',1],['s-tax','tax',1],['s-markup','markup',1],['s-terms','terms']];
+function renderInfo(){ const pj=P(); INFO.forEach(([id,k])=>$(id).value=pj[k]||''); SETS.forEach(([id,k])=>$(id).value=DB.settings[k]??''); }
+INFO.forEach(([id,k])=>$(id).addEventListener('input',e=>{ P()[k]=e.target.value; if(k==='name') $('ptitle').textContent=e.target.value||'Untitled'; save(); }));
+SETS.forEach(([id,k,n])=>$(id).addEventListener('input',e=>{ DB.settings[k]=n?(+e.target.value||0):e.target.value; save(); }));
 
-// ---- DISTO D2 over Bluetooth LE: native app (@capacitor-community/bluetooth-le) or browsers with Web Bluetooth
+// ================= DISTO D2 over Bluetooth LE =================
+// Native app: @capacitor-community/bluetooth-le. Browsers with Web Bluetooth (Chrome on Android, Bluefy on iPhone) use navigator.bluetooth.
 // The D2 sends each reading as a notification: a 4-byte little-endian float, in meters.
-const D2_MEAS = '3ab10101-f831-4395-b29d-570977d5bf94';
-const D2_SERVICE_GUESS = '3ab10100-f831-4395-b29d-570977d5bf94';
-const Cap = window.Capacitor;
-const BLE = Cap && Cap.isNativePlatform && Cap.isNativePlatform() && Cap.registerPlugin ? Cap.registerPlugin('BluetoothLe') : null;
-const policy = document.permissionsPolicy || document.featurePolicy;
-const WEBBLE = !BLE && !!navigator.bluetooth && !!(!policy || !policy.allowsFeature || policy.allowsFeature('bluetooth'));
+const D2_MEAS='3ab10101-f831-4395-b29d-570977d5bf94', D2_SERVICE='3ab10100-f831-4395-b29d-570977d5bf94';
+const Cap=window.Capacitor, BLE=Cap&&Cap.isNativePlatform&&Cap.isNativePlatform()&&Cap.registerPlugin?Cap.registerPlugin('BluetoothLe'):null;
+const policy=document.permissionsPolicy||document.featurePolicy;
+const WEBBLE=!BLE&&!!navigator.bluetooth&&!!(!policy||!policy.allowsFeature||policy.allowsFeature('bluetooth'));
 let bleSubs=[], lastBleAt=0;
 function bleStatus(t,ok){ const el=$('ble-state'); el.textContent=t; el.classList.toggle('on',!!ok); }
-function laserReading(feet){ const r=selRoom(); if(mode==='select' && r && (wallPicked || nextNeeded(r,-1)!=null)){ applyWall(feet); } else addSegment(feet,heading); }
-function onMeters(m){ const now=Date.now(); if(!(m>0) || now-lastBleAt<300) return; lastBleAt=now; laserReading(m*3.28084); }
-const connectedMsg = () => selRoom() ? 'D2 connected. Press its measure button to fill the highlighted wall.' : 'D2 connected. Each shot draws the next wall of a new room, or tap a room to measure its walls.';
-async function webConnect(){
-  try{ bleStatus('Searching…');
-    const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'DISTO'}],optionalServices:[D2_SERVICE_GUESS]});
-    bleStatus('Connecting…'); const server=await dev.gatt.connect();
-    const svc=await server.getPrimaryService(D2_SERVICE_GUESS); const ch=await svc.getCharacteristic(D2_MEAS);
+function bleUi(){ $('ble-connect').hidden=!!bleDev||!(BLE||WEBBLE); $('ble-disconnect').hidden=!bleDev; }
+function onMeters(m){ const now=Date.now(); if(!(m>0)||now-lastBleAt<300) return; lastBleAt=now; if(screen!=='project') return; if(tab!=='draw') go('project','draw'); applyLength(r96(m*3.28084),'laser'); }
+function connected(name){ bleUi(); bleStatus('● '+(name||'D2'),true); kpShow=false; if(tab==='draw') sheetMsg('D2 connected. Each press of the measure button fills the highlighted wall.','ok'); }
+function bleLost(){ bleDev=null; bleUi(); bleStatus('D2 disconnected'); kpShow=true; if(tab==='draw') renderSheet(); }
+async function webConnect(){ try{ bleStatus('Searching…');
+    const dev=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'DISTO'}],optionalServices:[D2_SERVICE]});
+    bleStatus('Connecting…'); const server=await dev.gatt.connect(); const svc=await server.getPrimaryService(D2_SERVICE); const ch=await svc.getCharacteristic(D2_MEAS);
     ch.addEventListener('characteristicvaluechanged',e=>{ const v=e.target.value; if(v.byteLength>=4) onMeters(v.getFloat32(0,true)); });
-    await ch.startNotifications();
-    dev.addEventListener('gattserverdisconnected',()=>{ bleDev=null; bleUi(); bleStatus('D2 disconnected'); });
-    bleDev={deviceId:dev.id,name:dev.name,web:dev}; bleUi(); bleStatus('● '+(dev.name||'D2'),true); renderEdit(connectedMsg(),'ok');
-  }catch(err){ bleDev=null; bleUi(); bleStatus(''); if(err&&err.name==='NotFoundError') return; renderEdit('Could not connect: '+String(err&&err.message||err),'err'); } }
+    await ch.startNotifications(); dev.addEventListener('gattserverdisconnected',bleLost); bleDev={deviceId:dev.id,name:dev.name,web:dev}; connected(dev.name);
+  }catch(err){ bleDev=null; bleUi(); bleStatus(''); if(err&&err.name==='NotFoundError') return; toast('Could not connect: '+String(err&&err.message||err)); } }
 function hexToView(v){ if(v instanceof DataView) return v; const hex=String(v).replace(/[^0-9a-f]/gi,''); const b=new Uint8Array(hex.length/2); for(let i=0;i<b.length;i++) b[i]=parseInt(hex.substr(i*2,2),16); return new DataView(b.buffer); }
-async function bleConnect(){
-  try{
-    bleStatus('Searching…');
-    await BLE.initialize({});
-    const dev = await BLE.requestDevice({ namePrefix:'DISTO', optionalServices:[D2_SERVICE_GUESS] });
-    bleStatus('Connecting…');
-    await BLE.connect({ deviceId: dev.deviceId });
-    const {services} = await BLE.getServices({ deviceId: dev.deviceId });
-    const svc = (services||[]).find(s=>(s.characteristics||[]).some(c=>c.uuid.toLowerCase()===D2_MEAS));
+async function nativeConnect(){ try{ bleStatus('Searching…'); await BLE.initialize({});
+    const dev=await BLE.requestDevice({namePrefix:'DISTO',optionalServices:[D2_SERVICE]}); bleStatus('Connecting…'); await BLE.connect({deviceId:dev.deviceId});
+    const {services}=await BLE.getServices({deviceId:dev.deviceId}); const svc=(services||[]).find(s=>(s.characteristics||[]).some(c=>c.uuid.toLowerCase()===D2_MEAS));
     if(!svc) throw new Error('This device does not send DISTO measurements. Check that it is a DISTO D2 with Bluetooth on.');
-    const service = svc.uuid.toLowerCase();
-    bleSubs.push(await BLE.addListener(`notification|${dev.deviceId}|${service}|${D2_MEAS}`, ev=>{
-      const dv = hexToView(ev.value); if(dv.byteLength<4) return;
-      onMeters(dv.getFloat32(0,true));
-    }));
-    bleSubs.push(await BLE.addListener(`disconnected|${dev.deviceId}`, ()=>{ bleDev=null; bleUi(); bleStatus('D2 disconnected'); }));
-    await BLE.startNotifications({ deviceId: dev.deviceId, service, characteristic: D2_MEAS });
-    bleDev = dev; bleUi(); bleStatus('● '+(dev.name||'D2'), true); renderEdit(connectedMsg(),'ok');
-  }catch(err){ bleDev=null; bleUi(); bleStatus(''); renderEdit(String(err && err.message || err).replace(/^Error:\s*/,''),'err'); }
-}
-async function bleDisconnect(){ if(!bleDev) return; try{ if(bleDev.web) bleDev.web.gatt.disconnect(); else await BLE.disconnect({deviceId:bleDev.deviceId}); }catch(e){} bleSubs.forEach(s=>s.remove&&s.remove()); bleSubs=[]; bleDev=null; bleUi(); bleStatus('Disconnected'); }
-function bleUi(){ $('ble-connect').hidden=!!bleDev; $('ble-disconnect').hidden=!bleDev; }
-if(BLE||WEBBLE){ $('ble-connect').hidden=false; $('ble-connect').onclick= BLE?bleConnect:webConnect; $('ble-disconnect').onclick=bleDisconnect; }
+    const service=svc.uuid.toLowerCase();
+    bleSubs.push(await BLE.addListener(`notification|${dev.deviceId}|${service}|${D2_MEAS}`,ev=>{ const dv=hexToView(ev.value); if(dv.byteLength>=4) onMeters(dv.getFloat32(0,true)); }));
+    bleSubs.push(await BLE.addListener(`disconnected|${dev.deviceId}`,bleLost));
+    await BLE.startNotifications({deviceId:dev.deviceId,service,characteristic:D2_MEAS}); bleDev=dev; connected(dev.name);
+  }catch(err){ bleDev=null; bleUi(); bleStatus(''); toast(String(err&&err.message||err).replace(/^Error:\s*/,'')); } }
+async function bleDisconnect(){ if(!bleDev) return; try{ if(bleDev.web) bleDev.web.gatt.disconnect(); else await BLE.disconnect({deviceId:bleDev.deviceId}); }catch(e){} bleSubs.forEach(s=>s.remove&&s.remove()); bleSubs=[]; bleLost(); }
+$('ble-connect').onclick=BLE?nativeConnect:webConnect; $('ble-disconnect').onclick=bleDisconnect; bleUi();
 
-all(); requestAnimationFrame(fit);
+// ================= start =================
+let ui=null; try{ ui=JSON.parse(localStorage.getItem(KEY+'-ui')); }catch(e){}
+if(ui&&ui.screen==='project'&&DB.projects.some(p=>p.id===ui.current)){ DB.current=ui.current; go('project',ui.tab||'draw'); } else go('home');
 })();
 </script>
 
