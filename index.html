@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
 </head>
 <body>
@@ -29,6 +29,7 @@
   --grid:#1f292e; --grid-major:#2b373d; --accent:#ec7840; --accent-ink:#1a0e08; --sel:#5aa6e6;
   --good:#5cc08a; --bad:#ef7a64; --field:#10161a; --hatch:#56636a; color-scheme:dark}
 *{box-sizing:border-box}
+html,body,button,.btn,.k,.tool,.chip,.mitem,.tabbar button{touch-action:manipulation}
 html,body{height:100%;background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--sheet)}
 button{font:inherit;color:inherit}
@@ -374,6 +375,7 @@ let sizeEntry=null;          // {target:'newroom'|'hole', step:'w'|'l', w}
 let view={x:-4,y:-4,w:44,h:44}, drag=null, pointers=new Map(), bleDev=null, undoStack=[], kpShow=true;
 const kp={ft:'',inch:'',fr:0,stage:'ft'};
 const svg=$('canvas'), layer=$('layer'), sheet=$('sheet');
+let lastCanvasTouch=0; // when a finger last touched the drawing
 const room = () => P() && P().rooms.find(r=>r.id===sel.room);
 const svgW = () => svg.clientWidth||400, svgH = () => svg.clientHeight||600;
 function sheetCover(){ return window.innerWidth>=900 ? 0 : sheet.offsetHeight; }
@@ -440,7 +442,7 @@ window.addEventListener('resize',()=>{ if(screen==='project'&&tab==='draw'){ syn
 function renderCanvas(){
   syncView(); svg.setAttribute('viewBox',`${view.x} ${view.y} ${view.w} ${view.h}`);
   const g=$('gridbg'), pad=400; g.setAttribute('x',Math.floor(view.x/5)*5-pad); g.setAttribute('y',Math.floor(view.y/5)*5-pad); g.setAttribute('width',view.w+pad*2); g.setAttribute('height',view.h+pad*2);
-  const fs=fs0(), pj=P(); let h='';
+  const fs=fs0(), pj=P(); let h='', lab=''; // wall-length labels go on top so tapping a number always edits that wall
   for(const r of pj.rooms){ const p=prod(r.productId), c=p?p.color:'#8a8f8c', isSel=r.id===sel.room;
     h+=`<polygon data-room="${r.id}" points="${r.pts.map(q=>q.join(',')).join(' ')}" fill="${c}" fill-opacity="${isSel?0.4:0.24}" stroke="var(--ink)" stroke-width="${fs*(isSel?0.16:0.1)}" stroke-linejoin="miter"/>`;
     (r.holes||[]).forEach((o,i)=>{ const hs=isSel&&sel.hole===i; h+=`<rect data-hole="${i}" data-hroom="${r.id}" x="${o.x}" y="${o.y}" width="${o.w}" height="${o.h}" fill="url(#hatch)" stroke="${hs?'var(--sel)':'var(--ink)'}" stroke-width="${fs*(hs?0.16:0.08)}" stroke-dasharray="${fs*0.4} ${fs*0.2}" style="${isSel?'cursor:move':''}"${isSel?'':' pointer-events="none"'}/>`; }); }
@@ -450,22 +452,26 @@ function renderCanvas(){
       const mx=(a[0]+b[0])/2-nx*off, my=(a[1]+b[1])/2-ny*off; let ang=Math.atan2(uy,ux)*180/Math.PI; if(ang>90||ang<-90) ang+=180;
       const ws=isSel&&editing&&sel.wall===i, st=wallState(r,i);
       const col= ws?'var(--accent)': isSel&&st==='need'?'var(--accent)': r.measured[i]?'var(--ink)':'var(--muted)';
-      h+=`<text x="${mx}" y="${my}" transform="rotate(${ang} ${mx} ${my})" text-anchor="middle" dominant-baseline="middle" font-family="JetBrains Mono,monospace" font-size="${fs*(ws?0.98:0.8)}" font-weight="${ws||(isSel&&st==='need')?700:500}" fill="${col}" pointer-events="none" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.14}">${fmtLen(L)}</text>`; });
+      const lbl=fmtLen(L), lw=Math.max(fs*2.4,lbl.length*fs*0.62), hit=mode==='select'?`<rect data-wall="${i}" data-wroom="${r.id}" x="${mx-lw/2}" y="${my-fs*0.85}" width="${lw}" height="${fs*1.7}" fill="transparent" style="cursor:pointer"/>`:'';
+      lab+=`<g transform="rotate(${ang} ${mx} ${my})">${hit}<text x="${mx}" y="${my}" text-anchor="middle" dominant-baseline="middle" font-family="JetBrains Mono,monospace" font-size="${fs*(ws?0.98:0.8)}" font-weight="${ws||(isSel&&st==='need')?700:500}" fill="${col}" pointer-events="none" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.14}">${lbl}</text></g>`; });
     (r.doors||[]).forEach((d,i)=>{ const g=doorGeom(r,d); if(!g) return; const ds=isSel&&sel.door===i;
       h+=`<line x1="${g.a[0]}" y1="${g.a[1]}" x2="${g.b[0]}" y2="${g.b[1]}" stroke="var(--sheet)" stroke-width="${fs*0.34}" pointer-events="none"/>`;
       h+=`<line x1="${g.a[0]}" y1="${g.a[1]}" x2="${g.b[0]}" y2="${g.b[1]}" stroke="${ds?'var(--sel)':'var(--accent)'}" stroke-width="${fs*0.12}" stroke-dasharray="${fs*0.3} ${fs*0.18}" pointer-events="none"/>`;
       [g.a,g.b].forEach(q=>{ h+=`<line x1="${q[0]-g.nx*fs*0.4}" y1="${q[1]-g.ny*fs*0.4}" x2="${q[0]+g.nx*fs*0.4}" y2="${q[1]+g.ny*fs*0.4}" stroke="var(--ink)" stroke-width="${fs*0.1}" pointer-events="none"/>`; });
-      if(isSel) h+=`<line data-door="${i}" x1="${g.a[0]}" y1="${g.a[1]}" x2="${g.b[0]}" y2="${g.b[1]}" stroke="transparent" stroke-width="${fs*2}" style="cursor:ew-resize"/>`; });
+      if(isSel) h+=`<line data-door="${i}" x1="${g.a[0]}" y1="${g.a[1]}" x2="${g.b[0]}" y2="${g.b[1]}" stroke="transparent" stroke-width="${fs*1.5}" style="cursor:ew-resize"/>`; });
     const [cx,cy]=centroid(r.pts), e=estimate(r);
     h+=`<text x="${cx}" y="${cy-fs*0.3}" text-anchor="middle" font-family="Barlow Condensed,sans-serif" font-weight="700" font-size="${fs*1.15}" fill="var(--ink)" pointer-events="none" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.2}">${esc(r.name)}</text>`;
     h+=`<text x="${cx}" y="${cy+fs*0.95}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="${fs*0.82}" fill="var(--ink)" pointer-events="none" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.16}">${num(e.area,1)} sq ft</text>`; }
   const sr=room();
+  if(mode==='select') for(const r of pj.rooms){ if(r===sr) continue; r.pts.forEach((a,i)=>{ const b=r.pts[(i+1)%r.pts.length];
+    h+=`<line data-wall="${i}" data-wroom="${r.id}" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="transparent" stroke-width="${fs*1.4}" stroke-linecap="round" style="cursor:pointer"/>`; }); }
   if(sr && mode==='select'){
     sr.pts.forEach((a,i)=>{ const b=sr.pts[(i+1)%sr.pts.length];
       if(editing&&sel.wall===i) h+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="var(--accent)" stroke-width="${fs*0.32}" stroke-linecap="round" pointer-events="none"/>`;
-      h+=`<line data-wall="${i}" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="transparent" stroke-width="${fs*1.9}" stroke-linecap="round" style="cursor:pointer"/>`; });
+      h+=`<line data-wall="${i}" data-wroom="${sr.id}" x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="transparent" stroke-width="${fs*1.9}" stroke-linecap="round" style="cursor:pointer"/>`; });
     sr.pts.forEach((q,i)=>{ h+=`<circle cx="${q[0]}" cy="${q[1]}" r="${fs*0.36}" fill="var(--sheet)" stroke="var(--sel)" stroke-width="${fs*0.12}" pointer-events="none"/><circle data-vi="${i}" cx="${q[0]}" cy="${q[1]}" r="${fs*1.15}" fill="transparent" style="cursor:grab"/>`; });
   }
+  h+=lab;
   if(mode==='rect' && rectPrev){ const [x1,y1,x2,y2]=rectPrev, x=Math.min(x1,x2), y=Math.min(y1,y2), w=Math.abs(x2-x1), hh=Math.abs(y2-y1);
     h+=`<rect x="${x}" y="${y}" width="${w}" height="${hh}" fill="var(--accent)" fill-opacity=".15" stroke="var(--accent)" stroke-width="${fs*0.16}"/>`;
     if(w>0.5) h+=`<text x="${x+w/2}" y="${y-fs*0.7}" text-anchor="middle" font-family="JetBrains Mono,monospace" font-weight="700" font-size="${fs*1.1}" fill="var(--accent)" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.2}">${fmtLen(w)}</text>`;
@@ -584,7 +590,7 @@ function renderSheet(){
   else if(t.kind==='wall'){ const r=t.r, n=r.pts.length; if(sel.wall==null||sel.wall>=n) sel.wall=nextNeeded(r,-1)??0;
     const chips=r.pts.map((_,i)=>{ const a=axisOf(r.pts,i), st=wallState(r,i); return `<button class="chip ${st}${i===sel.wall?' on':''}" data-chip="${i}">${st==='done'?'✓ ':''}${i+1} · ${fmtLen(a?a.L:0)}</button>`; }).join('');
     const nc=needCount(r), st=wallState(r,sel.wall);
-    const info = msg?'' : nc ? `<div class="smsg">${nc} more reading${nc>1?'s':''} needed. Shoot the <b>${sideOf(r,sel.wall)}</b> wall, or type it.</div>` : `<div class="smsg ok">All walls measured · ${num(estimate(r).area,1)} sq ft${r.gap>1/12?` · closed with a ${fmtIn(r.gap)} gap`:''}</div>`;
+    const info = msg?'' : wallPicked ? `<div class="smsg">Type the real length of the <b>${sideOf(r,sel.wall)}</b> wall and tap <b>Set</b>, or shoot it with the D2.</div>` : nc ? `<div class="smsg">${nc} more reading${nc>1?'s':''} needed. Shoot the <b>${sideOf(r,sel.wall)}</b> wall, or type it.</div>` : `<div class="smsg ok">All walls measured · ${num(estimate(r).area,1)} sq ft${r.gap>1/12?` · closed with a ${fmtIn(r.gap)} gap`:''}</div>`;
     h=`<div class="srow"><span class="stitle">${esc(r.name)} · wall ${sel.wall+1} of ${n}</span><button class="btn sm" data-a="w-prev" aria-label="Previous wall">‹</button><button class="btn sm" data-a="w-next" aria-label="Next wall">›</button><button class="btn primary sm" data-a="w-done">Done</button></div>
       <div class="chips">${chips}</div>${info}${m}
       ${kpShow?kpHTML(`${sideOf(r,sel.wall)} wall · ${st==='done'?'measured':st==='need'?'needs reading':'worked out'}`,kpPlaceholder()):`<button class="btn" data-a="kp-show">Show keypad</button>`}
@@ -752,7 +758,7 @@ function pinchStart(){ const [a,b]=[...pointers.values()]; const r=room();
   if(drag&&drag.orig&&r) r.pts=drag.orig; if(drag&&drag.horig&&r) Object.assign(r.holes[drag.hi],drag.horig); if(drag&&drag.dorig!=null&&r) r.doors[drag.di].t=drag.dorig;
   aim=null; hover=null; rectPrev=null;
   drag={type:'pinch',d0:Math.hypot(a[0]-b[0],a[1]-b[1])||1,mid:toWorld((a[0]+b[0])/2,(a[1]+b[1])/2),v:{...view}}; renderCanvas(); }
-svg.addEventListener('pointerdown',e=>{
+svg.addEventListener('pointerdown',e=>{ if(e.pointerType!=='mouse') lastCanvasTouch=Date.now();
   pointers.set(e.pointerId,[e.clientX,e.clientY]); svg.setPointerCapture(e.pointerId);
   if(pointers.size===2){ pinchStart(); return; } if(pointers.size>2) return;
   const w=toWorld(e.clientX,e.clientY), t=e.target, r=room();
@@ -762,7 +768,9 @@ svg.addEventListener('pointerdown',e=>{
   if(t.dataset.door!=null&&r){ sel.door=+t.dataset.door; sel.hole=null; editing=false; drag={type:'door',di:sel.door,dorig:r.doors[sel.door].t,moved:false}; kpReset(); renderDraw(); return; }
   if(t.dataset.hole!=null&&r&&t.dataset.hroom===r.id){ sel.hole=+t.dataset.hole; sel.door=null; editing=false; const o=r.holes[sel.hole]; drag={type:'hole',hi:sel.hole,horig:{...o},sx:e.clientX,sy:e.clientY,moved:false}; renderDraw(); return; }
   if(t.dataset.vi!=null&&r){ drag={type:'vertex',i:+t.dataset.vi,orig:r.pts.map(q=>[...q]),moved:false,start:[e.clientX,e.clientY]}; return; }
-  if(t.dataset.wall!=null&&r){ const i=+t.dataset.wall;
+  if(t.dataset.wall!=null){ const i=+t.dataset.wall, wr=t.dataset.wroom||sel.room;
+    if(wr!==sel.room){ sel={room:wr,wall:null,door:null,hole:null}; }
+    const r=room(); if(!r) return;
     if(sel.door!=null){ pushUndo('move doorway'); r.doors[sel.door].wall=i; r.doors[sel.door].t=0.5; save(); renderDraw(); drag={type:'none'}; return; }
     sel.wall=i; editing=true; wallPicked=true; sel.door=null; sel.hole=null; kpReset(); renderDraw(); drag={type:'wall',i,sx:e.clientX,sy:e.clientY,orig:r.pts.map(q=>[...q]),moved:false}; return; }
   if(t.dataset.room){ const id=t.dataset.room; if(sel.room!==id){ sel={room:id,wall:null,door:null,hole:null}; editing=false; renderDraw(); }
@@ -791,7 +799,7 @@ svg.addEventListener('pointermove',e=>{
     if(ax.ax==='x'){ p[i][1]=r96(o[i][1]+dd); p[j][1]=r96(o[j][1]+dd); } else { p[i][0]=r96(o[i][0]+dd); p[j][0]=r96(o[j][0]+dd); } r.pts=p; renderCanvas(); return; }
   if(drag.type==='room'){ if(!drag.moved && cmoved<12) return; const dx=snapTo(cdx,0.5), dy=snapTo(cdy,0.5); drag.moved=true;
     r.pts=drag.orig.map(q=>[r96(q[0]+dx),r96(q[1]+dy)]); r.holes.forEach((o,k)=>{ o.x=r96(drag.holes[k].x+dx); o.y=r96(drag.holes[k].y+dy); }); renderCanvas(); } });
-function pointerEnd(e){ pointers.delete(e.pointerId); if(!pointers.size && screen==='project' && tab==='draw' && mode==='select' && (editing||sel.door!=null||sel.hole!=null)) requestAnimationFrame(keepInView); if(!drag) return; const d=drag;
+function pointerEnd(e){ if(e.pointerType!=='mouse') lastCanvasTouch=Date.now(); pointers.delete(e.pointerId); if(!pointers.size && screen==='project' && tab==='draw' && mode==='select' && (editing||sel.door!=null||sel.hole!=null)) requestAnimationFrame(keepInView); if(!drag) return; const d=drag;
   if(d.type==='pinch'){ if(pointers.size===0) drag=null; return; }
   drag=null; const r=room();
   if(d.type==='aim'){ placeAim(); if(e.pointerType!=='mouse'){ hover=null; renderCanvas(); } return; }
@@ -805,6 +813,10 @@ function pointerEnd(e){ pointers.delete(e.pointerId); if(!pointers.size && scree
   if(d.type==='room'&&d.moved){ save(); renderDraw(); return; }
   if((d.type==='door'||d.type==='hole')&&d.moved){ save(); renderDraw(); } }
 svg.addEventListener('pointerup',pointerEnd); svg.addEventListener('pointercancel',pointerEnd);
+// A finger tap on the drawing must not also "click" whatever panel slides up under the finger (the keypad, a wall chip).
+svg.addEventListener('touchstart',e=>{ lastCanvasTouch=Date.now(); e.preventDefault(); },{passive:false});
+svg.addEventListener('touchend',e=>{ lastCanvasTouch=Date.now(); e.preventDefault(); },{passive:false});
+['click','mousedown','mouseup'].forEach(t=>document.addEventListener(t,e=>{ if(Date.now()-lastCanvasTouch<500 && !svg.contains(e.target)){ e.stopPropagation(); e.preventDefault(); } },true));
 svg.addEventListener('pointerleave',e=>{ if(mode==='draw'&&e.pointerType==='mouse'&&!drag){ hover=null; aim=null; renderCanvas(); liveUpdate(); } });
 svg.addEventListener('wheel',e=>{ e.preventDefault(); const w=toWorld(e.clientX,e.clientY), f=e.deltaY>0?1.12:1/1.12, nw=Math.min(400,Math.max(5,view.w*f)), k=nw/view.w; view.x=w[0]-(w[0]-view.x)*k; view.y=w[1]-(w[1]-view.y)*k; view.w=nw; renderCanvas(); },{passive:false});
 
@@ -904,6 +916,11 @@ async function nativeConnect(){ try{ bleStatus('Searching…'); await BLE.initia
   }catch(err){ bleDev=null; bleUi(); bleStatus(''); toast(String(err&&err.message||err).replace(/^Error:\s*/,'')); } }
 async function bleDisconnect(){ if(!bleDev) return; try{ if(bleDev.web) bleDev.web.gatt.disconnect(); else await BLE.disconnect({deviceId:bleDev.deviceId}); }catch(e){} bleSubs.forEach(s=>s.remove&&s.remove()); bleSubs=[]; bleLost(); }
 $('ble-connect').onclick=BLE?nativeConnect:webConnect; $('ble-disconnect').onclick=bleDisconnect; bleUi();
+
+// ================= no accidental zoom =================
+document.addEventListener('dblclick',e=>e.preventDefault(),{passive:false});
+['gesturestart','gesturechange'].forEach(t=>document.addEventListener(t,e=>e.preventDefault(),{passive:false}));
+let lastTouchEnd=0; document.addEventListener('touchend',e=>{ const now=Date.now(); if(now-lastTouchEnd<350 && e.target.closest && e.target.closest('button')){ e.preventDefault(); e.target.closest('button').click(); } lastTouchEnd=now; },{passive:false});
 
 // ================= start =================
 let ui=null; try{ ui=JSON.parse(localStorage.getItem(KEY+'-ui')); }catch(e){}
