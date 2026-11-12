@@ -1,0 +1,411 @@
+<title>Crypto Strategy Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: an ops console. Controls row, today's signals, strategy cards, then the equity / price / drawdown stack and the tables. One dark look on purpose. */
+:root{
+  --bg:#070B14; --panel:#0C1322; --panel-2:#111A2E; --line:rgba(140,170,240,.13); --line-2:rgba(140,170,240,.24);
+  --ink:#E4EAF6; --ink-2:#9AA7C2; --ink-3:#66748F;
+  --amber:#F2B441; --amber-ink:#1A1204;
+  --hold:#9AA7C2; --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+  --good:#4FD39A; --bad:#FF7A6B;
+  --grid:#1A2338; --axis:#2A3550;
+  --display:"Chakra Petch","Arial Narrow",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.5 var(--body);-webkit-font-smoothing:antialiased;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 48px;
+  background-image:radial-gradient(1100px 560px at 75% -10%,rgba(57,135,229,.09),transparent 60%),linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:auto,48px 48px,48px 48px;background-attachment:fixed}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px;border-radius:6px}
+.mono,.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:16px}
+
+.top{max-width:1180px;margin:0 auto 16px;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 20px;padding:22px 0 18px;border-bottom:1px solid var(--line-2)}
+.eyebrow{font:600 11px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--amber);margin:0 0 8px}
+h1{font:700 clamp(28px,5vw,40px)/1 var(--display);margin:0;letter-spacing:.01em;text-wrap:balance}
+.sub{color:var(--ink-2);margin:8px 0 0;max-width:64ch}
+.asof{font:500 12px/1.4 var(--mono);color:var(--ink-3);text-align:right}
+.asof b{color:var(--ink-2);font-weight:600}
+
+/* controls */
+.controls{display:flex;flex-wrap:wrap;gap:12px 18px;align-items:flex-end}
+.ctl{display:grid;gap:6px}
+.ctl>span{font:600 10.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+.seg{display:flex;background:var(--panel);border:1px solid var(--line-2);border-radius:9px;padding:3px;gap:2px}
+.seg button{min-height:32px;min-width:48px;padding:4px 12px;border:0;border-radius:6px;background:transparent;font:600 13px/1 var(--mono);color:var(--ink-2)}
+.seg button.on{background:var(--amber);color:var(--amber-ink)}
+.box{display:flex;align-items:center;gap:4px;height:38px;background:var(--panel);border:1px solid var(--line-2);border-radius:9px;padding:0 10px;font:600 14px var(--mono)}
+.box input{width:76px;background:transparent;border:0;font:600 14px var(--mono);color:var(--ink);padding:0}
+.box input:focus{outline:none}
+.box:focus-within{border-color:var(--amber)}
+.box small{color:var(--ink-3);font-weight:500}
+
+/* panels */
+.panel{background:var(--panel);border:1px solid var(--line-2);border-radius:12px;min-width:0}
+.ph{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 14px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.ph h2{font:600 13px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;margin:0}
+.ph h2 small{color:var(--ink-3);letter-spacing:.06em;margin-left:8px;text-transform:none;font-weight:500}
+.key{display:inline-block;width:14px;height:0;border-top:2px solid;vertical-align:middle;border-radius:1px}
+
+/* signals */
+.signals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.sig{padding:14px 16px;min-width:0;display:grid;gap:8px;align-content:start}
+.sig+.sig{border-left:1px solid var(--line)}
+.sig-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.sig-h span{font-weight:600;display:flex;align-items:center;gap:8px;min-width:0}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font:600 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;border:1px solid;white-space:nowrap}
+.chip i{width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.in{color:var(--good);border-color:rgba(79,211,154,.4);background:rgba(79,211,154,.08)}
+.chip.out{color:var(--ink-2);border-color:var(--line-2)}
+.sig p{margin:0;font-size:13.5px;color:var(--ink-2)}
+.sig .since{font:500 12px var(--mono);color:var(--ink-3)}
+
+/* strategy cards */
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.card{position:relative;text-align:left;background:var(--panel);border:1px solid var(--line-2);border-radius:12px;padding:14px;display:grid;gap:10px;align-content:start;min-width:0}
+.card.sel{border-color:var(--amber);box-shadow:inset 0 0 0 1px var(--amber)}
+.card-pick{position:absolute;inset:0;border:0;background:transparent;border-radius:12px;z-index:0}
+.card>*:not(.card-pick){position:relative;z-index:1;pointer-events:none}
+.card .params,.card .params *{pointer-events:auto}
+.card-h{display:flex;align-items:center;gap:8px;font-weight:600}
+.card-d{font-size:12.5px;color:var(--ink-2);margin:-4px 0 0;min-height:2.8em}
+.final{font:600 26px/1.1 var(--mono);white-space:nowrap}
+.final small{display:block;font:500 12px var(--mono);margin-top:4px}
+.up{color:var(--good)} .down{color:var(--bad)}
+.mets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;border-top:1px solid var(--line);padding-top:10px}
+.mets .k{display:block;font:600 9.5px/1.2 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.mets .v{display:block;font:600 14px/1.3 var(--mono)}
+.params{display:flex;flex-wrap:wrap;gap:8px;border-top:1px solid var(--line);padding-top:10px}
+.params label{display:flex;align-items:center;gap:6px;font:500 11px var(--mono);color:var(--ink-3)}
+.params input{width:52px;height:30px;border-radius:7px;border:1px solid var(--line-2);background:var(--bg);font:500 13px var(--mono);padding:3px 7px;color:var(--ink)}
+.params input:focus{outline:none;border-color:var(--amber)}
+
+/* charts */
+.charts{display:grid}
+.chartbox{position:relative;padding:10px 12px 6px}
+.chartbox+.chartbox{border-top:1px solid var(--line)}
+.ct{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:6px 14px;padding:4px 4px 6px}
+.ct h3{margin:0;font:600 13.5px/1.3 var(--body)}
+.ct p{margin:0;font-size:12.5px;color:var(--ink-3)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend b{font:600 12.5px var(--mono);color:var(--ink)}
+.svgwrap{position:relative;touch-action:pan-y}
+.svgwrap svg{display:block;width:100%;overflow:visible}
+.gl{stroke:var(--grid);stroke-width:1}
+.ax{stroke:var(--axis);stroke-width:1}
+.tl{font:500 10.5px var(--mono);fill:var(--ink-3)}
+.ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.ln.dim{opacity:.38}
+.xh{stroke:var(--ink-3);stroke-width:1}
+.tip{position:absolute;top:6px;pointer-events:none;background:rgba(7,11,20,.94);border:1px solid var(--line-2);border-radius:8px;padding:8px 10px;font-size:12px;min-width:150px;z-index:3}
+.tip .d{font:600 11px var(--mono);color:var(--ink-3);margin-bottom:4px;letter-spacing:.06em}
+.tip .r{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.tip .r span{display:flex;align-items:center;gap:7px;color:var(--ink-2)}
+.tip .r b{font:600 12px var(--mono);color:var(--ink)}
+
+/* tables */
+.lower{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:8px 14px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font:600 10px/1.2 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+td{font-family:var(--mono);font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:0}
+th .key{margin-right:6px}
+.empty{padding:22px 16px;color:var(--ink-2);text-align:center;margin:0}
+
+.fine{max-width:1180px;margin:8px auto 0;color:var(--ink-3);font-size:12.5px;line-height:1.55;display:grid;gap:6px}
+.fine p{margin:0;max-width:96ch}
+
+@media (max-width:1000px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.lower{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:700px){.signals{grid-template-columns:minmax(0,1fr)}.sig+.sig{border-left:0;border-top:1px solid var(--line)}.asof{text-align:left}}
+@media (max-width:520px){.cards{grid-template-columns:minmax(0,1fr)}.card-d{min-height:0}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<header class="top">
+  <div>
+    <p class="eyebrow">Crypto backtester · Coinbase daily prices</p>
+    <h1>Crypto Strategy Lab</h1>
+    <p class="sub">Three classic trading rules run on every day of real price history, after fees, against simply buying and holding. Signals use each day's close; trades happen at the next day's open.</p>
+  </div>
+  <p class="asof" id="asof"></p>
+</header>
+
+<main class="wrap">
+  <div class="controls" role="group" aria-label="Backtest settings">
+    <div class="ctl"><span>Coin</span><div class="seg" id="coin"></div></div>
+    <div class="ctl"><span>Period</span><div class="seg" id="period"></div></div>
+    <label class="ctl"><span>Start with</span><span class="box">$<input id="start" inputmode="decimal" autocomplete="off" value="1000"></span></label>
+    <label class="ctl"><span>Fee per trade</span><span class="box"><input id="fee" inputmode="decimal" autocomplete="off" value="0.6"><small>%</small></span></label>
+  </div>
+
+  <section class="panel" aria-labelledby="sig-h">
+    <div class="ph"><h2 id="sig-h">Signals today <small id="sig-sub"></small></h2></div>
+    <div class="signals" id="signals"></div>
+  </section>
+
+  <section class="cards" id="cards" aria-label="Strategies"></section>
+
+  <section class="panel" aria-labelledby="ch-h">
+    <div class="ph"><h2 id="ch-h">Results <small id="ch-sub"></small></h2><div class="legend" id="legend"></div></div>
+    <div class="charts">
+      <div class="chartbox"><div class="ct"><h3>Value of your money</h3><p>Log scale, so equal heights mean equal percentage moves</p></div><div class="svgwrap" id="c-eq"></div></div>
+      <div class="chartbox"><div class="ct"><h3 id="px-h">Price</h3><p id="px-p"></p></div><div class="svgwrap" id="c-px"></div></div>
+      <div class="chartbox"><div class="ct"><h3>Drawdown</h3><p id="dd-p">How far below its last peak, at each day</p></div><div class="svgwrap" id="c-dd"></div></div>
+    </div>
+  </section>
+
+  <div class="lower">
+    <section class="panel" aria-labelledby="yr-h">
+      <div class="ph"><h2 id="yr-h">Year by year</h2></div>
+      <div class="tablewrap"><table id="years"></table></div>
+    </section>
+    <section class="panel" aria-labelledby="tr-h">
+      <div class="ph"><h2 id="tr-h">Trades <small id="tr-sub"></small></h2></div>
+      <div class="tablewrap"><table id="trades"></table></div>
+    </section>
+  </div>
+</main>
+
+<footer class="fine">
+  <p>Prices are Coinbase Exchange daily candles (UTC days), from each coin's listing through the date at the top. The default fee of 0.6% per trade is close to Coinbase's taker fee for small accounts; set yours. Slippage and taxes aren't included, and an idle position earns nothing.</p>
+  <p>A backtest shows what a rule would have done, not what it will do. Settings tuned on this same history will look better here than they do live, so judge a rule by how it holds up across coins and periods without retuning. Nothing here places trades or is financial advice.</p>
+</footer>
+
+<script>
+/*__PRICES__*/
+(function () {
+'use strict';
+const $ = (s) => document.querySelector(s);
+const DAY = 86400;
+const STRATS = [
+  { id: 'hold', short: 'Hold', name: 'Buy and hold', color: 'var(--hold)', desc: 'Buy on the first day, never sell. The bar every rule has to beat.', params: [] },
+  { id: 'ma', short: 'MA cross', name: 'Moving-average cross', color: 'var(--s1)', desc: 'Own the coin while the fast average is above the slow one. A trend follower.', params: [{ k: 'fast', label: 'Fast', d: 50, min: 2, max: 400 }, { k: 'slow', label: 'Slow', d: 200, min: 3, max: 400 }] },
+  { id: 'brk', short: 'Breakout', name: 'Breakout', color: 'var(--s2)', desc: 'Buy a close above the recent high, sell a close below the recent low.', params: [{ k: 'enter', label: 'High of', d: 20, min: 2, max: 300 }, { k: 'exit', label: 'Low of', d: 10, min: 2, max: 300 }] },
+  { id: 'rsi', short: 'RSI dip', name: 'RSI dip buy', color: 'var(--s3)', desc: 'Buy when the 14-day RSI says oversold, sell once it recovers. Mean reversion.', params: [{ k: 'lo', label: 'Buy <', d: 30, min: 5, max: 60 }, { k: 'hi', label: 'Sell >', d: 55, min: 40, max: 95 }] },
+];
+const PERIODS = [['all', 'All'], ['5y', '5Y'], ['3y', '3Y'], ['1y', '1Y']];
+const COINS = [['BTC', 'Bitcoin'], ['ETH', 'Ethereum'], ['SOL', 'Solana']];
+const KEY = 'crypto-lab-v1';
+
+const st = Object.assign({ coin: 'BTC', period: 'all', start: 1000, fee: 0.6, sel: 'ma', p: {} }, (() => { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { return {}; } })());
+STRATS.forEach((s) => { st.p[s.id] = Object.assign({}, Object.fromEntries(s.params.map((q) => [q.k, q.d])), st.p[s.id] || {}); });
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) { /* this visit only */ } };
+
+/* ---------- formatting ---------- */
+const dateOf = (D, i) => new Date((D.t0 + i * DAY) * 1000);
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const fd = (d) => MON[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + d.getUTCFullYear();
+const fdShort = (d) => MON[d.getUTCMonth()] + ' ' + d.getUTCDate() + ' \u2019' + String(d.getUTCFullYear()).slice(2);
+function money(v) { const a = Math.abs(v); const s = a >= 1e6 ? (a / 1e6).toFixed(a >= 1e7 ? 1 : 2) + 'M' : a >= 1e4 ? Math.round(a).toLocaleString('en-US') : a >= 100 ? Math.round(a).toLocaleString('en-US') : a.toFixed(2); return (v < 0 ? '−$' : '$') + s; }
+function price(v) { return v >= 1000 ? '$' + Math.round(v).toLocaleString('en-US') : v >= 10 ? '$' + v.toFixed(2) : '$' + v.toPrecision(3); }
+const pct = (x, d = 1) => (x < 0 ? '−' : x > 0 ? '+' : '') + Math.abs(x * 100).toFixed(d) + '%';
+const pctU = (x, d = 0) => (x * 100).toFixed(d) + '%';
+const cls = (x) => (x > 0 ? 'up' : x < 0 ? 'down' : '');
+
+/* ---------- indicators ---------- */
+function sma(a, n) { const o = new Array(a.length).fill(NaN); let s = 0; for (let i = 0; i < a.length; i++) { s += a[i]; if (i >= n) s -= a[i - n]; if (i >= n - 1) o[i] = s / n; } return o; }
+function rsi(c, n) { const o = new Array(c.length).fill(NaN); let g = 0, l = 0; for (let i = 1; i < c.length; i++) { const ch = c[i] - c[i - 1]; const up = Math.max(ch, 0), dn = Math.max(-ch, 0);
+  if (i <= n) { g += up; l += dn; if (i === n) { g /= n; l /= n; o[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l); } } else { g = (g * (n - 1) + up) / n; l = (l * (n - 1) + dn) / n; o[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l); } } return o; }
+function priorMax(a, n) { const o = new Array(a.length).fill(NaN); for (let i = n; i < a.length; i++) { let m = -Infinity; for (let k = i - n; k < i; k++) if (a[k] > m) m = a[k]; o[i] = m; } return o; }
+function priorMin(a, n) { const o = new Array(a.length).fill(NaN); for (let i = n; i < a.length; i++) { let m = Infinity; for (let k = i - n; k < i; k++) if (a[k] < m) m = a[k]; o[i] = m; } return o; }
+
+// wanted position at each day's close (1 = own the coin), over the coin's whole history
+function signals(D, id, p) {
+  const n = D.c.length; const w = new Array(n).fill(0); const ctx = {};
+  if (id === 'hold') { w.fill(1); return { w, ctx }; }
+  if (id === 'ma') { const f = sma(D.c, p.fast), s = sma(D.c, p.slow); for (let i = 0; i < n; i++) w[i] = f[i] > s[i] ? 1 : 0; ctx.f = f; ctx.s = s; return { w, ctx }; }
+  if (id === 'brk') { const hh = priorMax(D.h, p.enter), ll = priorMin(D.l, p.exit); let pos = 0; for (let i = 0; i < n; i++) { if (!pos && D.c[i] > hh[i]) pos = 1; else if (pos && D.c[i] < ll[i]) pos = 0; w[i] = pos; } ctx.hh = hh; ctx.ll = ll; ctx.hhNext = priorMax(D.h.concat([0]), p.enter)[n]; ctx.llNext = priorMin(D.l.concat([Infinity]), p.exit)[n]; return { w, ctx }; }
+  const r = rsi(D.c, 14); let pos = 0; for (let i = 0; i < n; i++) { if (!pos && r[i] < p.lo) pos = 1; else if (pos && r[i] > p.hi) pos = 0; w[i] = pos; } ctx.r = r; return { w, ctx };
+}
+
+// trade the wanted positions over days [s, e]: decide at a close, fill at the next open, pay the fee each way
+function simulate(D, w, s, e, start, fee) {
+  let cash = start, units = 0, pos = 0, fees = 0, entry = null; const eq = new Float64Array(e - s + 1); const held = new Uint8Array(e - s + 1); const trades = [];
+  for (let i = s; i <= e; i++) {
+    const want = i > 0 ? w[i - 1] : 0;
+    if (want !== pos) {
+      const px = D.o[i];
+      if (want) { fees += cash * fee; entry = { i, px, cost: cash }; units = cash * (1 - fee) / px; cash = 0; }
+      else { const gross = units * px; fees += gross * fee; cash = gross * (1 - fee); units = 0; trades.push({ a: entry.i, ap: entry.px, b: i, bp: px, ret: cash / entry.cost - 1 }); entry = null; }
+      pos = want;
+    }
+    eq[i - s] = pos ? units * D.c[i] : cash; held[i - s] = pos;
+  }
+  if (entry) trades.push({ a: entry.i, ap: entry.px, b: null, bp: D.c[e], ret: (units * D.c[e] * (1 - fee)) / entry.cost - 1, open: true });
+  return { eq, held, trades, fees };
+}
+function stats(eq, held, start, trades) {
+  const n = eq.length; let peak = start, mdd = 0, sum = 0, sum2 = 0, prev = start, inMkt = 0; const dd = new Float64Array(n);
+  for (let k = 0; k < n; k++) { const v = eq[k]; const r = v / prev - 1; sum += r; sum2 += r * r; prev = v; if (v > peak) peak = v; dd[k] = v / peak - 1; if (dd[k] < mdd) mdd = dd[k]; inMkt += held[k]; }
+  const mean = sum / n, sd = Math.sqrt(Math.max(0, sum2 / n - mean * mean)); const fin = eq[n - 1];
+  const closed = trades.filter((t) => !t.open);
+  return { fin, total: fin / start - 1, cagr: Math.pow(fin / start, 365 / n) - 1, mdd, sharpe: sd > 0 ? (mean / sd) * Math.sqrt(365) : 0, expo: inMkt / n, ntr: closed.length, win: closed.length ? closed.filter((t) => t.ret > 0).length / closed.length : null, dd };
+}
+
+/* ---------- run everything for the current settings ---------- */
+let R = null;
+function run() {
+  const D = PRICES[st.coin]; const n = D.c.length; const e = n - 1;
+  const days = { all: n, '5y': 365 * 5, '3y': 365 * 3, '1y': 365 }[st.period]; const s = Math.max(1, n - days);
+  const fee = Math.max(0, Math.min(5, +st.fee || 0)) / 100; const start = Math.max(1, +st.start || 1000);
+  const res = STRATS.map((S) => { const sg = signals(D, S.id, st.p[S.id]); const sim = simulate(D, sg.w, s, e, start, fee); return Object.assign({ S, sg }, sim, stats(sim.eq, sim.held, start, sim.trades)); });
+  R = { D, s, e, n, start, fee, res };
+}
+
+/* ---------- rendering ---------- */
+function el(tag, cls, text) { const x = document.createElement(tag); if (cls) x.className = cls; if (text != null) x.textContent = text; return x; }
+const keyLine = (c) => '<i class="key" style="border-color:' + c + '"></i>';
+
+function renderControls() {
+  $('#coin').innerHTML = COINS.map(([k, n]) => '<button type="button" data-coin="' + k + '" class="' + (st.coin === k ? 'on' : '') + '" aria-pressed="' + (st.coin === k) + '" title="' + n + '">' + k + '</button>').join('');
+  $('#period').innerHTML = PERIODS.map(([k, n]) => '<button type="button" data-period="' + k + '" class="' + (st.period === k ? 'on' : '') + '" aria-pressed="' + (st.period === k) + '">' + n + '</button>').join('');
+}
+
+function signalText(r) {
+  const D = R.D, i = D.c.length - 1, c = D.c[i], x = r.sg.ctx, p = st.p[r.S.id], on = r.sg.w[i] === 1;
+  if (r.S.id === 'ma') { const g = x.f[i] / x.s[i] - 1; return 'The ' + p.fast + '-day average (' + price(x.f[i]) + ') is ' + (g >= 0 ? 'above' : 'below') + ' the ' + p.slow + '-day (' + price(x.s[i]) + '), a ' + Math.abs(g * 100).toFixed(1) + '% gap.'; }
+  if (r.S.id === 'brk') return on ? 'Sells on a close below ' + price(x.llNext) + ', the ' + p.exit + '-day low, ' + Math.abs((x.llNext / c - 1) * 100).toFixed(1) + '% under the last close.' : 'Buys on a close above ' + price(x.hhNext) + ', the ' + p.enter + '-day high, ' + Math.abs((x.hhNext / c - 1) * 100).toFixed(1) + '% over the last close.';
+  return 'RSI is ' + x.r[i].toFixed(0) + '. It ' + (on ? 'sells above ' + p.hi : 'buys below ' + p.lo) + '.';
+}
+function renderSignals() {
+  const D = R.D, last = D.c.length - 1;
+  $('#asof').innerHTML = 'Data through <b>' + fd(dateOf(D, last)) + '</b><br>' + COINS.find((c) => c[0] === st.coin)[1] + ' last close <b>' + price(D.c[last]) + '</b>';
+  $('#sig-sub').textContent = st.coin + ' · at the ' + fd(dateOf(D, last)) + ' close';
+  $('#signals').innerHTML = R.res.filter((r) => r.S.id !== 'hold').map((r) => {
+    const w = r.sg.w; const on = w[last] === 1; let k = last; while (k > 0 && w[k - 1] === w[last]) k--;
+    return '<div class="sig"><div class="sig-h"><span>' + keyLine(r.S.color) + r.S.name + '</span><span class="chip ' + (on ? 'in' : 'out') + '"><i></i>' + (on ? 'Own it' : 'In cash') + '</span></div><p>' + signalText(r) + '</p><span class="since">' + (on ? 'Holding' : 'Out') + ' since ' + fd(dateOf(D, k)) + '</span></div>';
+  }).join('');
+}
+
+function renderCards() {
+  const hold = R.res[0];
+  $('#cards').innerHTML = R.res.map((r) => {
+    const vs = r.S.id === 'hold' ? '' : r.fin / hold.fin - 1;
+    return '<article class="card' + (st.sel === r.S.id ? ' sel' : '') + '">' +
+      '<button type="button" class="card-pick" data-sel="' + r.S.id + '" aria-pressed="' + (st.sel === r.S.id) + '" aria-label="Show ' + r.S.name + ' on the charts"></button>' +
+      '<div class="card-h">' + keyLine(r.S.color) + r.S.name + '</div><p class="card-d">' + r.S.desc + '</p>' +
+      '<div class="final">' + money(r.fin) + '<small class="' + cls(r.total) + '">' + pct(r.total, 0) + (r.S.id === 'hold' ? ' total' : ' · ends ' + Math.abs(vs * 100).toFixed(0) + '% ' + (vs >= 0 ? 'above' : 'below') + ' holding') + '</small></div>' +
+      '<div class="mets"><div><span class="k">Per year</span><span class="v ' + cls(r.cagr) + '">' + pct(r.cagr) + '</span></div><div><span class="k">Worst drop</span><span class="v down">' + pct(r.mdd, 0) + '</span></div>' +
+      '<div><span class="k">Sharpe</span><span class="v">' + r.sharpe.toFixed(2) + '</span></div><div><span class="k">In the market</span><span class="v">' + pctU(r.expo) + '</span></div>' +
+      (r.S.id === 'hold' ? '' : '<div><span class="k">Trades</span><span class="v">' + r.ntr + '</span></div><div><span class="k">Winners</span><span class="v">' + (r.win == null ? '–' : pctU(r.win)) + '</span></div>') + '</div>' +
+      (r.S.params.length ? '<div class="params">' + r.S.params.map((q) => '<label for="p-' + r.S.id + '-' + q.k + '">' + q.label + '<input id="p-' + r.S.id + '-' + q.k + '" data-strat="' + r.S.id + '" data-k="' + q.k + '" inputmode="numeric" value="' + st.p[r.S.id][q.k] + '"></label>').join('') + '</div>' : '') + '</article>';
+  }).join('');
+}
+
+/* ---------- charts ---------- */
+const CH = {}; let hoverK = null;
+function logTicks(lo, hi) { const t = []; for (let e = Math.floor(Math.log10(lo)); e <= Math.ceil(Math.log10(hi)); e++) [1, 2, 5].forEach((m) => { const v = m * Math.pow(10, e); if (v >= lo && v <= hi) t.push(v); }); if (t.length > 7) return t.filter((v) => /^1/.test(String(v))); return t; }
+function linTicks(lo, hi) { const step = [0.05, 0.1, 0.2, 0.25, 0.5].find((s) => (hi - lo) / s <= 5) || 0.5; const t = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) t.push(+v.toFixed(4)); return t; }
+function xTicks(D, s, e) {
+  const t = []; const years = (e - s) / 365;
+  for (let i = s; i <= e; i++) { const d = dateOf(D, i); if (d.getUTCDate() !== 1) continue; const m = d.getUTCMonth();
+    if (years > 2.5 ? m === 0 : years > 1.2 ? m % 6 === 0 : m % 3 === 0) t.push({ i, label: years > 1.2 && m === 0 ? String(d.getUTCFullYear()) : MON[m] + (m === 0 ? ' ' + d.getUTCFullYear() : '') }); }
+  if (years > 7) return t.filter((x, k) => k % 2 === 0); return t;
+}
+function bucket(n, W) { const k = Math.max(1, Math.floor(n / (W * 1.5))); return k; }
+function pathOf(vals, X, Y, k) { let d = ''; for (let j = 0; j < vals.length; j += k) { d += (d ? 'L' : 'M') + X(j).toFixed(1) + ' ' + Y(vals[j]).toFixed(1); } const j = vals.length - 1; d += 'L' + X(j).toFixed(1) + ' ' + Y(vals[j]).toFixed(1); return d; }
+
+function chart(id, H, cfg) {
+  const host = $('#' + id); const W = Math.max(280, host.clientWidth); const ml = 8, mr = 58, mt = 8, mb = 22; const iw = W - ml - mr, ih = H - mt - mb;
+  const N = R.e - R.s + 1; const X = (j) => ml + (j / Math.max(1, N - 1)) * iw;
+  const lo = cfg.lo, hi = cfg.hi; const Y = cfg.log ? (v) => mt + ih - (Math.log(v) - Math.log(lo)) / (Math.log(hi) - Math.log(lo)) * ih : (v) => mt + ih - (v - lo) / (hi - lo) * ih;
+  let s = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + cfg.label + '">';
+  (cfg.log ? logTicks(lo, hi) : linTicks(lo, hi)).forEach((v) => { const y = Y(v).toFixed(1); s += '<line class="gl" x1="' + ml + '" x2="' + (ml + iw) + '" y1="' + y + '" y2="' + y + '"/><text class="tl" x="' + (ml + iw + 8) + '" y="' + (+y + 3.5) + '">' + cfg.fmt(v) + '</text>'; });
+  xTicks(R.D, R.s, R.e).forEach((t) => { const x = X(t.i - R.s); s += '<line class="gl" x1="' + x.toFixed(1) + '" x2="' + x.toFixed(1) + '" y1="' + mt + '" y2="' + (mt + ih) + '"/><text class="tl" x="' + x.toFixed(1) + '" y="' + (H - 6) + '" text-anchor="middle">' + t.label + '</text>'; });
+  s += '<line class="ax" x1="' + ml + '" x2="' + (ml + iw) + '" y1="' + (mt + ih) + '" y2="' + (mt + ih) + '"/>';
+  s += cfg.body(X, Y, bucket(N, iw), { ml, mt, iw, ih });
+  s += '<line class="xh" id="' + id + '-xh" x1="0" x2="0" y1="' + mt + '" y2="' + (mt + ih) + '" visibility="hidden"/></svg>';
+  host.innerHTML = s; const tip = el('div', 'tip'); tip.hidden = true; host.appendChild(tip);
+  CH[id] = { host, X, W, ml, iw, N, tip, rows: cfg.rows };
+}
+function renderCharts() {
+  const sel = R.res.find((r) => r.S.id === st.sel) || R.res[1]; const hold = R.res[0]; const D = R.D; const N = R.e - R.s + 1; const ordered = R.res.filter((r) => r !== sel).concat([sel]);
+  $('#ch-sub').textContent = st.coin + ' · ' + fd(dateOf(D, R.s)) + ' to ' + fd(dateOf(D, R.e));
+  $('#legend').innerHTML = R.res.map((r) => '<span>' + keyLine(r.S.color) + r.S.name + ' <b>' + money(r.fin) + '</b></span>').join('');
+  // equity
+  let lo = Infinity, hi = 0; R.res.forEach((r) => r.eq.forEach((v) => { if (v < lo) lo = v; if (v > hi) hi = v; }));
+  const narrow = $('#c-eq').clientWidth < 520;
+  chart('c-eq', narrow ? 240 : 300, { log: true, lo: lo * 0.92, hi: hi * 1.08, fmt: money, label: 'Value of $' + R.start + ' under each strategy over time, log scale',
+    body: (X, Y, k) => ordered.map((r) => '<path class="ln' + (r === sel || r === hold ? '' : ' dim') + '" stroke="' + r.S.color + '" d="' + pathOf(r.eq, X, Y, k) + '"/>').join('') + ordered.map((r) => '<circle cx="' + X(N - 1).toFixed(1) + '" cy="' + Y(r.eq[N - 1]).toFixed(1) + '" r="4" fill="' + r.S.color + '" stroke="var(--panel)" stroke-width="2"/>').join(''),
+    rows: (j) => R.res.map((r) => [r.S.color, r.S.name, money(r.eq[j])]) });
+  // price with the selected strategy's time in the market shaded
+  const c = D.c.slice(R.s, R.e + 1); let plo = Infinity, phi = 0; c.forEach((v) => { if (v < plo) plo = v; if (v > phi) phi = v; });
+  $('#px-h').textContent = COINS.find((x) => x[0] === st.coin)[1] + ' price'; $('#px-p').innerHTML = keyLine(sel.S.color) + ' Shaded where ' + sel.S.name.toLowerCase() + ' owns the coin';
+  chart('c-px', narrow ? 180 : 220, { log: true, lo: plo * 0.92, hi: phi * 1.08, fmt: price, label: 'Price, with periods in the market shaded',
+    body: (X, Y, k, g) => { let b = ''; for (let j = 0; j < N; j++) { if (!sel.held[j]) continue; let m = j; while (m + 1 < N && sel.held[m + 1]) m++; b += '<rect x="' + X(j).toFixed(1) + '" y="' + g.mt + '" width="' + Math.max(1, X(m) - X(j)).toFixed(1) + '" height="' + g.ih + '" fill="' + sel.S.color + '" fill-opacity=".14"/>'; j = m; }
+      return b + '<path class="ln" stroke="var(--ink)" stroke-width="1.6" d="' + pathOf(c, X, Y, k) + '"/>'; },
+    rows: (j) => [['var(--ink)', 'Close', price(c[j])], [sel.S.color, sel.S.name, sel.held[j] ? 'Owns it' : 'In cash']] });
+  // drawdown
+  const dlo = Math.min(sel.mdd, hold.mdd);
+  chart('c-dd', narrow ? 130 : 150, { log: false, lo: Math.min(-0.05, dlo * 1.05), hi: 0, fmt: (v) => (v === 0 ? '0%' : '−' + Math.round(-v * 100) + '%'), label: 'Drawdown from the last peak for ' + sel.S.name + ' and buy and hold',
+    body: (X, Y, k) => { const area = (r) => pathOf(r.dd, X, Y, k) + 'L' + X(N - 1).toFixed(1) + ' ' + Y(0).toFixed(1) + 'L' + X(0).toFixed(1) + ' ' + Y(0).toFixed(1) + 'Z';
+      return (sel === hold ? '' : '<path d="' + area(hold) + '" fill="var(--hold)" fill-opacity=".08"/><path class="ln" stroke="var(--hold)" d="' + pathOf(hold.dd, X, Y, k) + '"/>') + '<path d="' + area(sel) + '" fill="' + sel.S.color + '" fill-opacity=".12"/><path class="ln" stroke="' + sel.S.color + '" d="' + pathOf(sel.dd, X, Y, k) + '"/>'; },
+    rows: (j) => (sel === hold ? [hold] : [sel, hold]).map((r) => [r.S.color, r.S.name, r.dd[j] === 0 ? 'At a peak' : pct(r.dd[j])]) });
+  $('#dd-p').textContent = sel === hold ? 'Buy and hold, below its last peak' : sel.S.name + ' against buy and hold, below each one’s last peak';
+  if (hoverK != null) showHover(Math.min(hoverK, N - 1));
+}
+function showHover(j) {
+  hoverK = j; const D = R.D;
+  Object.values(CH).forEach((c) => { const x = c.X(j); const xh = c.host.querySelector('line.xh'); if (xh) { xh.setAttribute('x1', x); xh.setAttribute('x2', x); xh.setAttribute('visibility', 'visible'); }
+    const t = c.tip; t.replaceChildren(el('div', 'd', fd(dateOf(D, R.s + j)))); c.rows(j).forEach(([col, name, val]) => { const r = el('div', 'r'); const sp = el('span'); const k = el('i', 'key'); k.style.borderColor = col; sp.append(k, document.createTextNode(name)); r.append(sp, el('b', null, val)); t.appendChild(r); });
+    t.hidden = false; const w = t.offsetWidth; t.style.left = (x + 14 + w > c.W ? x - 14 - w : x + 14) + 'px'; });
+}
+function hideHover() { hoverK = null; Object.values(CH).forEach((c) => { c.tip.hidden = true; const xh = c.host.querySelector('line.xh'); if (xh) xh.setAttribute('visibility', 'hidden'); }); }
+['c-eq', 'c-px', 'c-dd'].forEach((id) => {
+  const host = $('#' + id);
+  host.addEventListener('pointermove', (e) => { const c = CH[id]; if (!c) return; const r = host.getBoundingClientRect(); const j = Math.round(((e.clientX - r.left - c.ml) / c.iw) * (c.N - 1)); if (j < 0 || j > c.N - 1) { hideHover(); return; } showHover(j); });
+  host.addEventListener('pointerdown', (e) => host.dispatchEvent(new PointerEvent('pointermove', e)));
+  host.addEventListener('pointerleave', hideHover);
+});
+
+/* ---------- tables ---------- */
+function renderTables() {
+  const D = R.D; const sel = R.res.find((r) => r.S.id === st.sel) || R.res[1];
+  // each calendar year's return, measured from the previous year's last close (or the start); * marks a partial year
+  const N = R.e - R.s + 1; const d0 = dateOf(D, R.s); const startsJan1 = d0.getUTCMonth() === 0 && d0.getUTCDate() === 1;
+  const years = []; let prevIdx = -1;
+  for (let j = 0; j < N; j++) { const y = dateOf(D, R.s + j).getUTCFullYear(); const nextY = j + 1 < N ? dateOf(D, R.s + j + 1).getUTCFullYear() : null; if (nextY !== y) { years.push({ y, a: prevIdx, b: j, partial: (prevIdx === -1 && !startsJan1) || nextY === null }); prevIdx = j; } }
+  $('#years').innerHTML = '<thead><tr><th>Year</th>' + R.res.map((r) => '<th>' + keyLine(r.S.color) + r.S.short + '</th>').join('') + '</tr></thead><tbody>' +
+    years.slice().reverse().map((Y) => '<tr><td>' + Y.y + (Y.partial ? '*' : '') + '</td>' + R.res.map((r) => { const a = Y.a < 0 ? R.start : r.eq[Y.a]; const v = r.eq[Y.b] / a - 1; return '<td class="' + cls(v) + '">' + pct(v, 0) + '</td>'; }).join('') + '</tr>').join('') + '</tbody>';
+  const tr = sel.trades.slice().reverse();
+  $('#tr-sub').innerHTML = keyLine(sel.S.color) + ' ' + sel.S.name + (sel.S.id === 'hold' ? '' : ' · ' + sel.ntr + ' closed, fees ' + money(sel.fees));
+  $('#trades').innerHTML = tr.length ? '<thead><tr><th>Bought</th><th>Price</th><th>Sold</th><th>Price</th><th>Return</th></tr></thead><tbody>' + tr.slice(0, 40).map((t) => '<tr><td>' + fdShort(dateOf(D, t.a)) + '</td><td>' + price(t.ap) + '</td><td>' + (t.open ? 'Still open' : fdShort(dateOf(D, t.b))) + '</td><td>' + price(t.bp) + '</td><td class="' + cls(t.ret) + '">' + pct(t.ret) + '</td></tr>').join('') + '</tbody>' + (tr.length > 40 ? '<tfoot><tr><td colspan="5" style="text-align:left;color:var(--ink-3)">Latest 40 of ' + tr.length + '</td></tr></tfoot>' : '')
+    : '<tbody><tr><td class="empty">No trades in this period.</td></tr></tbody>';
+}
+
+function renderAll() { run(); renderControls(); renderSignals(); renderCards(); renderCharts(); renderTables(); save(); }
+
+/* ---------- input ---------- */
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.coin) { st.coin = b.dataset.coin; renderAll(); }
+  else if (b.dataset.period) { st.period = b.dataset.period; renderAll(); }
+  else if (b.dataset.sel) { st.sel = b.dataset.sel; renderCards(); renderCharts(); renderTables(); save(); }
+});
+let tmr = 0; const later = (fn) => { clearTimeout(tmr); tmr = setTimeout(fn, 250); };
+$('#start').addEventListener('input', (e) => { const v = parseFloat(e.target.value.replace(/[$,]/g, '')); if (v > 0) { st.start = v; later(renderAll); } });
+$('#fee').addEventListener('input', (e) => { const v = parseFloat(e.target.value); if (v >= 0 && v <= 5) { st.fee = v; later(renderAll); } });
+$('#cards').addEventListener('input', (e) => {
+  const x = e.target; if (!x.dataset.strat) return; const S = STRATS.find((s) => s.id === x.dataset.strat); const q = S.params.find((p) => p.k === x.dataset.k); const v = parseInt(x.value, 10);
+  if (!(v >= q.min && v <= q.max)) return; st.p[S.id][q.k] = v;
+  later(() => { const id = x.id; const pos = x.selectionStart; renderAll(); const n = document.getElementById(id); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (er) { /* number field */ } } });
+});
+$('#start').value = st.start; $('#fee').value = st.fee;
+let rw = 0; new ResizeObserver(() => { const w = $('#c-eq').clientWidth; if (Math.abs(w - rw) > 4) { rw = w; if (R) renderCharts(); } }).observe($('#c-eq'));
+renderAll();
+window.__lab = { run: () => { run(); return R; }, sma, rsi, simulate, stats, signals, get state() { return st; } };
+})();
+</script>
