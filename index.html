@@ -489,7 +489,7 @@ function renderCanvas(){
 function doorGeom(r,d){ const n=r.pts.length; if(d.wall>=n) return null; const a=r.pts[d.wall], b=r.pts[(d.wall+1)%n], L=Math.hypot(b[0]-a[0],b[1]-a[1]); if(L<0.1) return null;
   const ux=(b[0]-a[0])/L, uy=(b[1]-a[1])/L, w=Math.min(d.w,L), c=Math.min(L-w/2,Math.max(w/2,d.t*L));
   return {a:[a[0]+ux*(c-w/2),a[1]+uy*(c-w/2)], b:[a[0]+ux*(c+w/2),a[1]+uy*(c+w/2)], nx:-uy, ny:ux, L, ux, uy, a0:a}; }
-function renderDraw(canvasOnly){ if(!P()) return; renderCanvas(); if(!canvasOnly){ renderSheet(); if(editing||sel.door!=null||sel.hole!=null) keepInView(); } positionFab(); }
+function renderDraw(canvasOnly){ if(!P()) return; renderCanvas(); if(!canvasOnly){ renderSheet(); if((editing||sel.door!=null||sel.hole!=null) && !pointers.size) keepInView(); } positionFab(); }
 // slide the view so the selected room isn't hidden under the bottom panel
 function keepInView(){ const r=room(); if(!r) return; const b=bbox(r.pts), s=view.w/svgW(), visH=(svgH()-sheetCover())*s, m=fs0()*2.2;
   let moved=false; if(b.h+2*m>visH||b.w+2*m>view.w){ const k=Math.max((b.h+2*m)/visH,(b.w+2*m)/view.w); view.w*=k; syncView(); moved=true; }
@@ -760,14 +760,14 @@ svg.addEventListener('pointerdown',e=>{
   if(mode==='rect'){ const g=gridStep(); const p0=[snapTo(w[0],g),snapTo(w[1],g)]; drag={type:'rect',p0}; rectPrev=[...p0,...p0]; renderCanvas(); return; }
   if(sizeEntry){ drag={type:'pan',sx:e.clientX,sy:e.clientY,v:{...view},moved:false,keep:true}; return; }
   if(t.dataset.door!=null&&r){ sel.door=+t.dataset.door; sel.hole=null; editing=false; drag={type:'door',di:sel.door,dorig:r.doors[sel.door].t,moved:false}; kpReset(); renderDraw(); return; }
-  if(t.dataset.hole!=null&&r&&t.dataset.hroom===r.id){ sel.hole=+t.dataset.hole; sel.door=null; editing=false; const o=r.holes[sel.hole]; drag={type:'hole',hi:sel.hole,horig:{...o},start:w,moved:false}; renderDraw(); return; }
+  if(t.dataset.hole!=null&&r&&t.dataset.hroom===r.id){ sel.hole=+t.dataset.hole; sel.door=null; editing=false; const o=r.holes[sel.hole]; drag={type:'hole',hi:sel.hole,horig:{...o},sx:e.clientX,sy:e.clientY,moved:false}; renderDraw(); return; }
   if(t.dataset.vi!=null&&r){ drag={type:'vertex',i:+t.dataset.vi,orig:r.pts.map(q=>[...q]),moved:false,start:[e.clientX,e.clientY]}; return; }
   if(t.dataset.wall!=null&&r){ const i=+t.dataset.wall;
     if(sel.door!=null){ pushUndo('move doorway'); r.doors[sel.door].wall=i; r.doors[sel.door].t=0.5; save(); renderDraw(); drag={type:'none'}; return; }
-    sel.wall=i; editing=true; wallPicked=true; sel.door=null; sel.hole=null; kpReset(); renderDraw(); drag={type:'wall',i,start:w,orig:r.pts.map(q=>[...q]),moved:false}; return; }
+    sel.wall=i; editing=true; wallPicked=true; sel.door=null; sel.hole=null; kpReset(); renderDraw(); drag={type:'wall',i,sx:e.clientX,sy:e.clientY,orig:r.pts.map(q=>[...q]),moved:false}; return; }
   if(t.dataset.room){ const id=t.dataset.room; if(sel.room!==id){ sel={room:id,wall:null,door:null,hole:null}; editing=false; renderDraw(); }
     else if(sel.door!=null||sel.hole!=null){ sel.door=null; sel.hole=null; renderDraw(); }
-    const rr=room(); drag={type:'room',start:w,orig:rr.pts.map(q=>[...q]),holes:clone(rr.holes),moved:false,sx:e.clientX,sy:e.clientY}; return; }
+    const rr=room(); drag={type:'room',orig:rr.pts.map(q=>[...q]),holes:clone(rr.holes),moved:false,sx:e.clientX,sy:e.clientY}; return; }
   drag={type:'pan',sx:e.clientX,sy:e.clientY,v:{...view},moved:false}; });
 svg.addEventListener('pointermove',e=>{
   if(pointers.has(e.pointerId)) pointers.set(e.pointerId,[e.clientX,e.clientY]);
@@ -781,16 +781,17 @@ svg.addEventListener('pointermove',e=>{
   if(drag.type==='pan'){ const dx=(e.clientX-drag.sx)*px, dy=(e.clientY-drag.sy)*px; if(Math.abs(e.clientX-drag.sx)+Math.abs(e.clientY-drag.sy)>6) drag.moved=true; view.x=drag.v.x-dx; view.y=drag.v.y-dy; renderCanvas(); return; }
   if(!r) return;
   if(drag.type==='door'){ const d=r.doors[drag.di], gm=doorGeom(r,d); if(!gm) return; const along=(w[0]-gm.a0[0])*gm.ux+(w[1]-gm.a0[1])*gm.uy; d.t=Math.min(1,Math.max(0,snapTo(along,1/12)/gm.L)); drag.moved=true; renderCanvas(); return; }
-  if(drag.type==='hole'){ const o=r.holes[drag.hi]; const dx=snapTo(w[0]-drag.start[0],g), dy=snapTo(w[1]-drag.start[1],g); if(dx||dy) drag.moved=true; o.x=r96(drag.horig.x+dx); o.y=r96(drag.horig.y+dy); renderCanvas(); return; }
-  if(drag.type==='vertex'){ if(!drag.moved && Math.hypot(e.clientX-drag.start[0],e.clientY-drag.start[1])<6) return; drag.moved=true;
+  const cdx=drag.sx!=null?(e.clientX-drag.sx)*px:0, cdy=drag.sy!=null?(e.clientY-drag.sy)*px:0, cmoved=drag.sx!=null?Math.hypot(e.clientX-drag.sx,e.clientY-drag.sy):0;
+  if(drag.type==='hole'){ const o=r.holes[drag.hi]; if(!drag.moved && cmoved<10) return; const dx=snapTo(cdx,g), dy=snapTo(cdy,g); drag.moved=true; o.x=r96(drag.horig.x+dx); o.y=r96(drag.horig.y+dy); renderCanvas(); return; }
+  if(drag.type==='vertex'){ if(!drag.moved && Math.hypot(e.clientX-drag.start[0],e.clientY-drag.start[1])<12) return; drag.moved=true;
     const o=drag.orig, n=o.length, i=drag.i, a=(i-1+n)%n, b=(i+1)%n, p=o.map(q=>[...q]); p[i]=[snapTo(w[0],g),snapTo(w[1],g)];
     for(const k of [a,b]){ if(Math.abs(o[k][1]-o[i][1])<1e-6) p[k]=[o[k][0],p[i][1]]; else if(Math.abs(o[k][0]-o[i][0])<1e-6) p[k]=[p[i][0],o[k][1]]; } r.pts=p; renderCanvas(); return; }
-  if(drag.type==='wall'){ const o=drag.orig, i=drag.i, j=(i+1)%o.length, ax=axisOf(o,i); if(!ax||ax.ax==='d') return; const d= ax.ax==='x'?w[1]-drag.start[1]:w[0]-drag.start[0];
-    if(!drag.moved && Math.abs(d)<10*px) return; drag.moved=true; const dd=snapTo(d,g), p=o.map(q=>[...q]);
+  if(drag.type==='wall'){ const o=drag.orig, i=drag.i, j=(i+1)%o.length, ax=axisOf(o,i); if(!ax||ax.ax==='d') return; const d= ax.ax==='x'?cdy:cdx;
+    if(!drag.moved && (cmoved<16 || Math.abs(d)<14*px)) return; /* a tap with a little finger wobble is still a tap */ drag.moved=true; const dd=snapTo(d,g), p=o.map(q=>[...q]);
     if(ax.ax==='x'){ p[i][1]=r96(o[i][1]+dd); p[j][1]=r96(o[j][1]+dd); } else { p[i][0]=r96(o[i][0]+dd); p[j][0]=r96(o[j][0]+dd); } r.pts=p; renderCanvas(); return; }
-  if(drag.type==='room'){ if(!drag.moved && Math.abs(e.clientX-drag.sx)+Math.abs(e.clientY-drag.sy)<8) return; const dx=snapTo(w[0]-drag.start[0],0.5), dy=snapTo(w[1]-drag.start[1],0.5); drag.moved=true;
+  if(drag.type==='room'){ if(!drag.moved && cmoved<12) return; const dx=snapTo(cdx,0.5), dy=snapTo(cdy,0.5); drag.moved=true;
     r.pts=drag.orig.map(q=>[r96(q[0]+dx),r96(q[1]+dy)]); r.holes.forEach((o,k)=>{ o.x=r96(drag.holes[k].x+dx); o.y=r96(drag.holes[k].y+dy); }); renderCanvas(); } });
-function pointerEnd(e){ pointers.delete(e.pointerId); if(!drag) return; const d=drag;
+function pointerEnd(e){ pointers.delete(e.pointerId); if(!pointers.size && screen==='project' && tab==='draw' && mode==='select' && (editing||sel.door!=null||sel.hole!=null)) requestAnimationFrame(keepInView); if(!drag) return; const d=drag;
   if(d.type==='pinch'){ if(pointers.size===0) drag=null; return; }
   drag=null; const r=room();
   if(d.type==='aim'){ placeAim(); if(e.pointerType!=='mouse'){ hover=null; renderCanvas(); } return; }
@@ -881,7 +882,8 @@ const WEBBLE=!BLE&&!!navigator.bluetooth&&!!(!policy||!policy.allowsFeature||pol
 let bleSubs=[], lastBleAt=0;
 function bleStatus(t,ok){ const el=$('ble-state'); el.textContent=t; el.classList.toggle('on',!!ok); }
 function bleUi(){ $('ble-connect').hidden=!!bleDev||!(BLE||WEBBLE); $('ble-disconnect').hidden=!bleDev; }
-function onMeters(m){ const now=Date.now(); if(!(m>0)||now-lastBleAt<300) return; lastBleAt=now; if(screen!=='project') return; if(tab!=='draw') go('project','draw'); applyLength(r96(m*3.28084),'laser'); }
+let lastBleVal=0;
+function onMeters(m){ const now=Date.now(); if(!(m>0)||now-lastBleAt<400) return; if(Math.abs(m-lastBleVal)<0.0005 && now-lastBleAt<2000) return; lastBleAt=now; lastBleVal=m; if(screen!=='project') return; if(tab!=='draw') go('project','draw'); applyLength(r96(m*3.28084),'laser'); }
 function connected(name){ bleUi(); bleStatus('● '+(name||'D2'),true); kpShow=false; if(tab==='draw') sheetMsg('D2 connected. Each press of the measure button fills the highlighted wall.','ok'); }
 function bleLost(){ bleDev=null; bleUi(); bleStatus('D2 disconnected'); kpShow=true; if(tab==='draw') renderSheet(); }
 async function webConnect(){ try{ bleStatus('Searching…');
