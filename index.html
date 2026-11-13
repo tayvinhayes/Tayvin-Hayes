@@ -64,7 +64,7 @@ button{font:inherit;color:inherit}
 .floattools{position:absolute;top:10px;left:max(10px,env(safe-area-inset-left,0px));display:flex;gap:6px;z-index:4}
 .floattools .btn{box-shadow:0 1px 3px rgb(0 0 0 / .12)}
 .fab{position:absolute;right:max(14px,env(safe-area-inset-right,0px));z-index:6;width:58px;height:58px;border-radius:50%;background:var(--accent);color:var(--accent-ink);border:0;font:400 34px/1 var(--body);box-shadow:0 3px 10px rgb(0 0 0 / .25);cursor:pointer;display:flex;align-items:center;justify-content:center}
-.sheet{position:absolute;left:0;right:0;bottom:0;z-index:5;background:var(--sheet);border-top:1px solid var(--line);box-shadow:0 -4px 16px rgb(0 0 0 / .08);max-height:62%;overflow:auto;padding-block:10px 12px;display:flex;flex-direction:column;gap:9px}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:5;background:var(--sheet);border-top:1px solid var(--line);box-shadow:0 -4px 16px rgb(0 0 0 / .08);max-height:74%;overflow:auto;padding-block:10px 12px;display:flex;flex-direction:column;gap:9px}
 @media (min-width:900px){ .sheet{left:auto;top:0;width:380px;max-height:none;border-top:0;border-left:1px solid var(--line);box-shadow:none} #canvas{right:380px;width:auto} }
 .srow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .srow > *{min-width:0}
@@ -89,17 +89,25 @@ label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--mu
 #rm-prod{flex:1 1 150px}
 /* Keypad */
 .kp{display:flex;flex-direction:column;gap:6px}
-.kp-disp{display:flex;align-items:baseline;justify-content:space-between;gap:10px;border:2px solid var(--accent);border-radius:8px;padding:6px 12px;background:var(--field)}
+.kp-disp{display:flex;align-items:baseline;justify-content:space-between;gap:10px;border:2px solid var(--accent);border-radius:8px;padding:4px 12px;background:var(--field)}
 .kp-disp .lbl{font:600 12px var(--body);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
-.kp-disp .val{font:600 26px var(--mono);font-variant-numeric:tabular-nums}
+.kp-disp .val{font:600 23px var(--mono);font-variant-numeric:tabular-nums}
 .kp-disp .val.ph{color:var(--muted);font-weight:400}
 .kp-fr{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
 .kp-keys{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
-.k{height:46px;border:1px solid var(--line);border-radius:8px;background:var(--field);font:500 20px var(--mono);cursor:pointer;color:var(--ink)}
-.kp-fr .k{height:40px;font:600 21px var(--body)}
+.k{height:42px;border:1px solid var(--line);border-radius:8px;background:var(--field);font:500 20px var(--mono);cursor:pointer;color:var(--ink)}
+.kp-fr .k{height:36px;font:600 21px var(--body)}
 .k.on{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
 .k.set{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font:700 17px var(--body)}
 .k.fn{font:600 14px var(--body);color:var(--muted)}
+.dirpad{display:flex;gap:12px;align-items:center}
+.dirs{display:grid;grid-template-columns:repeat(3,50px);grid-template-rows:repeat(3,40px);gap:5px;flex:0 0 auto}
+.dir{border:1px solid var(--line);border-radius:8px;background:var(--field);font:600 24px var(--body);color:var(--ink);cursor:pointer}
+.dir.on{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
+.dirs.ask .dir{border:2px solid var(--accent);color:var(--accent)}
+.dirmid{display:flex;align-items:center;justify-content:center;font:600 12px var(--mono);color:var(--accent);text-align:center;line-height:1.1}
+.dirnote{font-size:14px;color:var(--muted);line-height:1.4;flex:1;min-width:0}
+.dirnote b{color:var(--ink)}
 /* Menus & dialogs */
 .scrim{position:fixed;inset:0;background:rgb(10 16 20 / .35);z-index:40;display:flex;align-items:flex-end;justify-content:center}
 .menu{background:var(--sheet);width:100%;max-width:560px;border-radius:14px 14px 0 0;padding:14px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:10px;max-height:85%;overflow:auto}
@@ -371,7 +379,7 @@ function quote(pj){ pj=pj||P(); const S=DB.settings; const by=new Map(); let bas
 let screen='home', tab='draw';
 let mode='select';           // select | draw | rect
 let sel={room:null,wall:null,door:null,hole:null}, editing=false, wallPicked=false;
-let draft=[], draftKeys=new Set(), shotLast=false, aim=null, hover=null, ang45=false, rectPrev=null;
+let draft=[], draftShot=[], activeSeg=null, nextDir=null, pendingLen=null, shotLast=false, aim=null, hover=null, ang45=false, rectPrev=null;
 let sizeEntry=null;          // {target:'newroom'|'hole', step:'w'|'l', w}
 let view={x:-4,y:-4,w:44,h:44}, drag=null, pointers=new Map(), bleDev=null, undoStack=[], redoStack=[], kpShow=true;
 const kp={ft:'',inch:'',fr:0,stage:'ft'};
@@ -497,9 +505,9 @@ function renderCanvas(){
     const pts = aim&&aim.close ? [...draft,draft[0]] : hover ? [...draft,hover] : draft;
     if(pts.length>1) h+=`<polyline points="${pts.map(q=>q.join(',')).join(' ')}" fill="none" stroke="var(--ink)" stroke-width="${fs*0.14}" stroke-linejoin="miter" pointer-events="none"/>`;
     // the active wall (the one a reading or the keypad will set) is drawn in the accent colour
-    const act = hover&&!(aim&&aim.close)&&draft.length ? [draft[draft.length-1],hover] : (!hover&&draft.length>=2 ? [draft[draft.length-2],draft[draft.length-1]] : null);
+    const act = hover&&!(aim&&aim.close)&&draft.length ? [draft[draft.length-1],hover] : (!hover&&activeSeg!=null ? [draft[activeSeg],draft[activeSeg+1]] : (!hover&&draft.length>=2 ? [draft[draft.length-2],draft[draft.length-1]] : null));
     if(act) h+=`<line x1="${act[0][0]}" y1="${act[0][1]}" x2="${act[1][0]}" y2="${act[1][1]}" stroke="var(--accent)" stroke-width="${fs*0.3}" stroke-linecap="round" pointer-events="none"/>`;
-    for(let i=1;i<pts.length;i++){ const [x1,y1]=pts[i-1],[x2,y2]=pts[i], L=Math.hypot(x2-x1,y2-y1); if(L<0.25) continue; const live=(hover&&i===pts.length-1)||(!hover&&i===pts.length-1&&draft.length>=2);
+    for(let i=1;i<pts.length;i++){ const [x1,y1]=pts[i-1],[x2,y2]=pts[i], L=Math.hypot(x2-x1,y2-y1); if(L<0.25) continue; const live=(hover&&i===pts.length-1)||(!hover&&(activeSeg!=null?i===activeSeg+1:i===pts.length-1&&draft.length>=2));
       const vert=Math.abs(x2-x1)<1e-6, tx=(x1+x2)/2+(vert?fs*1.2:0), ty=(y1+y2)/2-(vert?0:fs*0.8);
       h+=`<text x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="middle" font-family="JetBrains Mono,monospace" font-size="${fs*(live?1.15:0.85)}" font-weight="${live?700:500}" fill="${live?'var(--accent)':'var(--ink)'}" paint-order="stroke" stroke="var(--sheet)" stroke-width="${fs*0.2}" pointer-events="none">${fmtLen(L)}</text>`; }
     draft.forEach((q,i)=>{ const first=i===0&&draft.length>=3; h+=`<circle cx="${q[0]}" cy="${q[1]}" r="${fs*(first?0.55:0.32)}" fill="${i===0?'var(--accent)':'var(--sheet)'}" stroke="var(--accent)" stroke-width="${fs*0.12}" pointer-events="none"/>`;
@@ -559,7 +567,7 @@ function target(){
   return {kind:'room',r}; }
 function kpPlaceholder(){ const t=target();
   if(t.kind==='wall'){ const a=axisOf(t.r.pts,sel.wall); return a?fmtLen(a.L):'0′'; }
-  if(t.kind==='draw'&&draft.length>=2){ const a=draft[draft.length-2], b=draft[draft.length-1]; return fmtLen(Math.hypot(b[0]-a[0],b[1]-a[1])); }
+  if(t.kind==='draw'){ if(pendingLen!=null) return fmtLen(pendingLen); const k=curSeg(); if(k>=0){ const a=draft[k], b=draft[k+1]; return fmtLen(Math.hypot(b[0]-a[0],b[1]-a[1])); } }
   if(t.kind==='door') return fmtLen(t.d.w);
   if(t.kind==='size'&&sizeEntry.target==='hole'){ const o=room().holes[sel.hole]; return o?fmtLen(sizeEntry.step==='w'?o.w:o.h):'0′'; }
   return '0′'; }
@@ -573,7 +581,7 @@ function applyLength(L,src){ const t=target();
   setMode('draw'); drawLength(L); }
 function nudge(d){ const t=target();
   if(t.kind==='wall'){ const a=axisOf(t.r.pts,sel.wall); if(a){ wallPicked=true; applyWall(Math.max(1/96,a.L+d),true); } }
-  else if(t.kind==='draw'&&draft.length>=2){ const a=draft[draft.length-2], b=draft[draft.length-1]; drawLength(Math.max(1/96,Math.hypot(b[0]-a[0],b[1]-a[1])+d),true); }
+  else if(t.kind==='draw'&&curSeg()>=0){ const k=curSeg(), a=draft[k], b=draft[k+1]; drawLength(Math.max(1/96,Math.hypot(b[0]-a[0],b[1]-a[1])+d),true); }
   else if(t.kind==='door'){ t.d.w=r96(Math.max(1/12,t.d.w+d)); save(); renderDraw(); } }
 
 // ================= sheet (context panel) =================
@@ -585,12 +593,19 @@ function renderSheet(){
   if(t.kind==='size'){ const isHole=sizeEntry.target==='hole', w=sizeEntry.step==='w';
     h=`<div class="srow"><span class="stitle">${isHole?'Cutout size':'Rectangle room'}</span><button class="btn ghost sm" data-a="size-cancel">Cancel</button></div>
       <div class="smsg">${w?`Step 1 of 2: <b>width</b> (left to right). Type it or shoot it with the D2.`:`Step 2 of 2: <b>length</b> (top to bottom). Width is ${fmtLen(sizeEntry.w)}.`}</div>${m}${kpHTML(w?'Width':'Length',kpPlaceholder())}`; }
-  else if(t.kind==='draw'){ const n=draft.length;
-    const status = !n ? 'Tap where the first corner is.' : n===1 ? 'Tap the direction the first wall runs, then shoot it with the D2 or type its length.' : shotLast ? 'Tap the direction of the next wall, or shoot again to go on turning right.' : 'Shoot this wall with the D2, or type its length. Drag to adjust it.';
-    h=`<div class="srow"><span class="stitle">Free draw · ${Math.max(0,n-1)} wall${n===2?'':'s'}</span><span class="stat" id="live"></span></div>
-      <div class="smsg">${esc(status)}</div>${m}
-      <div class="srow"><button class="btn" data-a="d-undo"${n?'':' disabled'}>Undo</button><button class="btn primary" data-a="d-close"${n>=3?'':' disabled'} style="flex:1">Close room</button><button class="btn" data-a="d-45" aria-pressed="${ang45}" title="Allow 45° walls">45°</button><button class="btn ghost" data-a="d-cancel">Cancel</button></div>
-      ${n>=2||kpShow?kpHTML('Active wall',kpPlaceholder()):''}`; }
+  else if(t.kind==='draw'){ const n=draft.length, segs=Math.max(0,n-1), k=curSeg();
+    const lastShot = segs>0 && draftShot[segs-1];
+    const status = pendingLen!=null ? `Which way does this <b>${fmtLen(pendingLen)}</b> wall go? Tap an arrow.`
+      : activeSeg!=null ? `Back on <b>wall ${activeSeg+1}</b>. Shoot it or type its length; the walls after it move with it.`
+      : !n ? 'Tap where the first corner is, or pick a direction and shoot the first wall.'
+      : segs>0 && !lastShot ? 'Shoot this wall with the D2, or type its length.'
+      : nextDir!=null ? `Next wall goes <b>${DIRS[nextDir][2]}</b>. Shoot it.`
+      : 'Pick which way the next wall goes (arrow or tap the drawing), then shoot it.';
+    const cells=[5,6,7,4,-1,0,3,2,1].map(d=> d<0 ? `<div class="dirmid">${pendingLen!=null?fmtLen(pendingLen):''}</div>` : (d%2&&!ang45) ? '<span></span>' : `<button class="dir${nextDir===d?' on':''}" data-dir="${d}" aria-label="Next wall goes ${DIRS[d][2]}">${DIRS[d][3]}</button>`).join('');
+    h=`<div class="srow"><span class="stitle">Free draw · ${segs} wall${segs===1?'':'s'}${activeSeg!=null?` · on wall ${activeSeg+1}`:''}</span><span class="stat" id="live"></span><button class="btn sm" data-a="d-45" aria-pressed="${ang45}" title="Allow 45° walls">45°</button>${kpShow?'':'<button class="btn sm" data-a="kp-show">Keypad</button>'}<button class="btn ghost sm" data-a="d-cancel">Cancel</button></div>
+      <div class="dirpad"><div class="dirs${pendingLen!=null?' ask':''}" role="group" aria-label="Next wall direction">${cells}</div><div class="dirnote">${status}</div></div>${m}
+      <div class="srow"><button class="btn" data-a="d-back"${k>0||(k===0&&activeSeg==null&&segs>1)?'':' disabled'} aria-label="Go back a wall">‹ Back</button><button class="btn" data-a="d-fwd"${activeSeg!=null?'':' disabled'} aria-label="Go forward a wall">Fwd ›</button><button class="btn" data-a="d-undo"${n?'':' disabled'}>Undo</button><button class="btn primary" data-a="d-close"${n>=3?'':' disabled'} style="flex:1">Close room</button></div>
+      ${kpShow?kpHTML(activeSeg!=null?`Wall ${activeSeg+1}`:pendingLen!=null?'Reading waiting for a direction':'Active wall',kpPlaceholder()):''}`; }
   else if(mode==='rect'){ h=`<div class="srow"><span class="stitle">Draw a rectangle</span><button class="btn ghost sm" data-a="rect-cancel">Cancel</button></div><div class="smsg">Put your finger on one corner and drag to the opposite corner. You'll measure the walls next.</div>${m}`; }
   else if(t.kind==='door'){ const d=t.d;
     h=`<div class="srow"><span class="stitle">Doorway</span><button class="btn ghost sm" data-a="desel-sub">Done</button></div>
@@ -632,11 +647,14 @@ function renderSheet(){
 function productOptions(id){ return '<option value="">— No flooring —</option>'+DB.products.map(p=>`<option value="${p.id}"${p.id===id?' selected':''}>${esc(p.name)}</option>`).join(''); }
 function flash(){ sheet.classList.add('flash'); setTimeout(()=>sheet.classList.remove('flash'),350); }
 
-sheet.addEventListener('click',e=>{ const c=e.target.closest('[data-chip]'); if(c){ sel.wall=+c.dataset.chip; wallPicked=true; kpReset(); renderDraw(); return; }
+sheet.addEventListener('click',e=>{ const dd=e.target.closest('[data-dir]'); if(dd&&mode==='draw'){ pickDir(+dd.dataset.dir); return; }
+  const c=e.target.closest('[data-chip]'); if(c){ sel.wall=+c.dataset.chip; wallPicked=true; kpReset(); renderDraw(); return; }
   const b=e.target.closest('[data-a]'); if(!b) return; const a=b.dataset.a, r=room();
   switch(a){
     case 'size-cancel': sizeEntry=null; kpReset(); renderDraw(); break;
     case 'd-undo': undoPoint(); break;
+    case 'd-back': { const k=curSeg(); activeSeg=Math.max(0,(activeSeg==null?k:activeSeg)-1); pendingLen=null; kpReset(); renderDraw(); break; }
+    case 'd-fwd': { if(activeSeg==null) break; activeSeg = activeSeg+1 >= draft.length-2 ? null : activeSeg+1; kpReset(); renderDraw(); break; }
     case 'd-close': closeDraft(); break;
     case 'd-45': ang45=!ang45; sheetMsg(ang45?'45° walls on: drag at an angle to draw one.':'Walls lock to 90° again.'); break;
     case 'd-cancel': setMode('select'); break;
@@ -712,7 +730,7 @@ function copyRoom(r){ const c=clone(r); c.id=uid('r'); c.name=r.name+' copy'; co
   P().rooms.push(c); sel={room:c.id,wall:null,door:null,hole:null}; editing=false; save(); fit(); }
 
 // ================= modes =================
-function setMode(m){ mode=m; setTimeout(undoUi,0); draft=[]; draftKeys=new Set(); shotLast=false; hover=null; aim=null; rectPrev=null; kpReset(); if(m!=='select'){ editing=false; } renderDraw(); }
+function setMode(m){ mode=m; setTimeout(undoUi,0); draft=[]; draftShot=[]; activeSeg=null; nextDir=null; pendingLen=null; shotLast=false; hover=null; aim=null; rectPrev=null; kpReset(); if(m!=='select'){ editing=false; } renderDraw(); }
 // Free draw: where a finger at `raw` puts the next corner (90° or 45° lock, grid lengths, line up with nearby corners)
 function drawSnap(raw){
   const px=view.w/svgW(), tol=24*px, g=gridStep(), last=draft[draft.length-1];
@@ -727,23 +745,32 @@ function drawSnap(raw){
   for(const c of cands){ if(c===last) continue; const d=Math.abs(raw[1]-c[1]); if(d<bd){bd=d;y=c[1];gy=c[1];} } return {pt:[last[0],r96(y)],guideY:gy}; }
 function liveUpdate(){ const el=$('live'); if(!el) return; if(!aim){ el.textContent=''; return; } if(aim.close){ el.textContent='lift to close'; return; }
   const last=draft[draft.length-1]; if(!last){ el.textContent='lift to start here'; return; } const L=Math.hypot(aim.pt[0]-last[0],aim.pt[1]-last[1]); el.innerHTML= L>0?`<b>${fmtLen(L)}</b> ${DIRS[dirOf(last,aim.pt)][3]}`:''; }
+const curSeg = () => activeSeg!=null ? activeSeg : draft.length-2;
 function placeAim(){ const a=aim; aim=null; if(!a) return; if(a.close){ hover=null; closeDraft(); return; }
   const last=draft[draft.length-1]; if(last && Math.hypot(a.pt[0]-last[0],a.pt[1]-last[1])<1e-6){ renderDraw(); return; }
-  draft.push(a.pt); shotLast=false; kpReset(); renderDraw(); if(draft.length===2) fitIfOut(a.pt); }
-// Set the active (last) wall to length L along the direction it was tapped; with no active wall, add one turning right.
+  draft.push(a.pt); if(draft.length>=2) draftShot.push(false); shotLast=false; activeSeg=null; nextDir=null; kpReset();
+  if(pendingLen!=null && draft.length>=2){ const L=pendingLen; pendingLen=null; setSegLen(draft.length-2,L); return afterWall(); } // tapped the direction for a waiting reading
+  renderDraw(); if(draft.length===2) fitIfOut(a.pt); }
+// Set wall k to length L along its direction; the corners after it move with it.
+function setSegLen(k,L){ const a=draft[k], b=draft[k+1], d=Math.hypot(b[0]-a[0],b[1]-a[1]); const u=d>1e-9?[(b[0]-a[0])/d,(b[1]-a[1])/d]:[1,0], delta=L-d;
+  for(let m=k+1;m<draft.length;m++) draft[m]=[r96(draft[m][0]+u[0]*delta), r96(draft[m][1]+u[1]*delta)]; draftShot[k]=true; }
+function addWall(dir,L){ const last=draft[draft.length-1], u=DIRS[dir]; draft.push([r96(last[0]+u[0]*L), r96(last[1]+u[1]*L)]); draftShot.push(true); }
+function afterWall(){ shotLast=true; const b=draft[draft.length-1], miss=Math.hypot(b[0]-draft[0][0],b[1]-draft[0][1]);
+  if(draft.length>=5 && miss<0.75) return closeDraft(miss);
+  fitIfOut(b); renderDraw(); flash(); }
+// A reading (or keypad length) in free draw.
 function drawLength(L,isNudge){
   if(!draft.length) draft.push(freeSpot());
-  if(draft.length===1 || (shotLast && !isNudge)){ const last=draft[draft.length-1]; let dir=0;
-    if(draft.length>=2) dir=(dirOf(draft[draft.length-2],last)+2)%8;
-    const u=DIRS[dir]; draft.push([r96(last[0]+u[0]*L), r96(last[1]+u[1]*L)]); }
-  else { const a=draft[draft.length-2], b=draft[draft.length-1]; const d=Math.hypot(b[0]-a[0],b[1]-a[1]); const u= d>1e-9?[(b[0]-a[0])/d,(b[1]-a[1])/d]:[1,0];
-    draftKeys.delete(segKey(a,b)); draft[draft.length-1]=[r96(a[0]+u[0]*L), r96(a[1]+u[1]*L)]; }
-  const a=draft[draft.length-2], b=draft[draft.length-1]; draftKeys.add(segKey(a,b)); shotLast=true;
-  const miss=Math.hypot(b[0]-draft[0][0],b[1]-draft[0][1]);
-  if(draft.length>=5 && miss<0.75){ draftKeys.add(segKey(a,draft[0])); return closeDraft(miss); }
-  fitIfOut(b); renderDraw(); flash(); }
+  const segs=draft.length-1;
+  if(isNudge){ const k=curSeg(); if(k>=0){ setSegLen(k,L); renderDraw(); } return; }
+  if(activeSeg!=null){ const k=activeSeg; setSegLen(k,L); activeSeg=null; renderDraw(); flash(); sheetMsg(`Wall ${k+1} set to ${fmtLen(L)}. Back at the newest wall.`,'ok'); return; }
+  if(segs>0 && !draftShot[segs-1]){ setSegLen(segs-1,L); return afterWall(); }   // the wall you tapped out
+  if(nextDir!=null){ const d=nextDir; nextDir=null; addWall(d,L); return afterWall(); } // direction picked first, then the shot
+  pendingLen=L; renderDraw(); flash(); }                                          // ask which way before drawing it
+function pickDir(d){ if(pendingLen!=null){ const L=pendingLen; pendingLen=null; nextDir=null; if(!draft.length) draft.push(freeSpot()); addWall(d,L); return afterWall(); }
+  nextDir = nextDir===d ? null : d; renderSheet(); }
 function fitIfOut(p){ const m=fs0()*2, H=view.h-sheetCover()*view.w/svgW(); if(p[0]<view.x+m||p[0]>view.x+view.w-m||p[1]<view.y+m||p[1]>view.y+H-m) fit(); }
-function undoPoint(){ if(!draft.length) return; const gone=draft.pop(); const prev=draft[draft.length-1]; if(prev) draftKeys.delete(segKey(prev,gone)); shotLast= draft.length>=2 && draftKeys.has(segKey(draft[draft.length-2],draft[draft.length-1])); renderDraw(); }
+function undoPoint(){ if(pendingLen!=null){ pendingLen=null; renderDraw(); return; } if(!draft.length) return; draft.pop(); if(draftShot.length>=draft.length) draftShot.pop(); activeSeg=null; nextDir=null; shotLast=!!draftShot[draftShot.length-1]; renderDraw(); }
 function closeDraft(autoGap){
   if(draft.length<3){ sheetMsg('Draw at least two walls before closing the room.','err'); return; }
   let pts=draft.map(q=>[...q]); const f=pts[0]; const l=pts[pts.length-1]; const ex=Math.abs(f[0]-l[0]), ey=Math.abs(f[1]-l[1]); let gap=typeof autoGap==='number'?autoGap:0;
@@ -752,7 +779,9 @@ function closeDraft(autoGap){
     else pts.push(lastHoriz?[l[0],f[1]]:[f[0],l[1]]); }
   pts=cleanPts(pts);
   if(pts.length<3||Math.abs(area(pts))<0.25){ sheetMsg('That shape has no floor area. Tap Undo and try again.','err'); return; }
-  const measured=pts.map((q,i)=>draftKeys.has(segKey(q,pts[(i+1)%pts.length])));
+  const keys=new Set(); draftShot.forEach((v,i)=>{ if(v) keys.add(segKey(draft[i],draft[i+1])); });
+  if(typeof autoGap==='number' && draftShot[draftShot.length-1]) keys.add(segKey(draft[draft.length-2],draft[0]));
+  const measured=pts.map((q,i)=>keys.has(segKey(q,pts[(i+1)%pts.length])));
   const r=addRoom(pts,measured); r.gap=gap>1/96?gap:0; save(); setMode('select'); sel={room:r.id,wall:null,door:null,hole:null};
   const sq=num(estimate(r).area,1);
   if(needCount(r)){ editing=true; wallPicked=false; sel.wall=nextNeeded(r,-1); fit(); sheetMsg(`Room drawn. Shoot each orange wall for an exact size, starting with the ${sideOf(r,sel.wall)} wall.`); }
