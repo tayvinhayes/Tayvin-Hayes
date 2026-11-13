@@ -183,6 +183,7 @@ td .sub{display:block;font-size:12px;color:var(--muted)}
     <div class="floattools">
       <button class="btn sm" id="fit">Fit</button>
       <button class="btn sm" id="undo-act" hidden>Undo</button>
+      <button class="btn sm" id="redo-act" hidden>Redo</button>
     </div>
     <button class="fab" id="fab" aria-label="Add">+</button>
     <section class="sheet gut" id="sheet" aria-live="polite"></section>
@@ -372,7 +373,7 @@ let mode='select';           // select | draw | rect
 let sel={room:null,wall:null,door:null,hole:null}, editing=false, wallPicked=false;
 let draft=[], draftKeys=new Set(), shotLast=false, aim=null, hover=null, ang45=false, rectPrev=null;
 let sizeEntry=null;          // {target:'newroom'|'hole', step:'w'|'l', w}
-let view={x:-4,y:-4,w:44,h:44}, drag=null, pointers=new Map(), bleDev=null, undoStack=[], kpShow=true;
+let view={x:-4,y:-4,w:44,h:44}, drag=null, pointers=new Map(), bleDev=null, undoStack=[], redoStack=[], kpShow=true;
 const kp={ft:'',inch:'',fr:0,stage:'ft'};
 const svg=$('canvas'), layer=$('layer'), sheet=$('sheet');
 let lastCanvasTouch=0; // when a finger last touched the drawing
@@ -380,8 +381,20 @@ const room = () => P() && P().rooms.find(r=>r.id===sel.room);
 const svgW = () => svg.clientWidth||400, svgH = () => svg.clientHeight||600;
 function sheetCover(){ return window.innerWidth>=900 ? 0 : sheet.offsetHeight; }
 
-function pushUndo(label){ undoStack.push({rooms:clone(P().rooms),label}); if(undoStack.length>40) undoStack.shift(); $('undo-act').hidden=false; }
-function popUndo(){ const u=undoStack.pop(); if(!u) return; P().rooms=u.rooms; if(!room()) sel={room:null,wall:null,door:null,hole:null}; editing=editing&&!!room(); save(); $('undo-act').hidden=!undoStack.length; renderDraw(); toast('Undid: '+u.label); }
+// Undo works one room at a time and only ever puts a room back the way it was. It never removes a room;
+// a deleted room comes back on Undo, and Redo reverses an Undo.
+function undoUi(){ $('undo-act').hidden=!undoStack.length&&mode!=='draw'; $('redo-act').hidden=!redoStack.length||mode==='draw'; }
+function pushEntry(label,before,idx){ undoStack.push({id:before.id,before:clone(before),idx,label}); if(undoStack.length>60) undoStack.shift(); redoStack=[]; undoUi(); }
+function pushUndo(label,r){ r=r||room(); if(!r) return; pushEntry(label,r,P().rooms.indexOf(r)); }
+function putRoom(id,state,idx){ const rooms=P().rooms, cur=rooms.findIndex(x=>x.id===id);
+  if(state===null){ if(cur>=0) rooms.splice(cur,1); } else if(cur>=0) rooms[cur]=clone(state); else rooms.splice(Math.min(Math.max(0,idx),rooms.length),0,clone(state)); }
+function restoreSel(id){ if(P().rooms.some(x=>x.id===id)){ sel={room:id,wall:editing?sel.wall:null,door:null,hole:null}; const r=room(); if(sel.wall!=null&&sel.wall>=r.pts.length) sel.wall=0; } else { sel={room:null,wall:null,door:null,hole:null}; editing=false; } }
+function popUndo(){ const u=undoStack.pop(); if(!u){ undoUi(); return; } const rooms=P().rooms, cur=rooms.findIndex(x=>x.id===u.id);
+  redoStack.push({id:u.id,after:cur>=0?clone(rooms[cur]):null,idx:cur>=0?cur:u.idx,label:u.label}); putRoom(u.id,u.before,u.idx);
+  restoreSel(u.id); save(); undoUi(); renderDraw(); toast('Undid: '+u.label,'Redo',popRedo); }
+function popRedo(){ const e=redoStack.pop(); if(!e){ undoUi(); return; } const rooms=P().rooms, cur=rooms.findIndex(x=>x.id===e.id);
+  if(cur>=0) undoStack.push({id:e.id,before:clone(rooms[cur]),idx:cur,label:e.label}); putRoom(e.id,e.after,e.idx);
+  restoreSel(e.id); save(); undoUi(); renderDraw(); toast('Redid: '+e.label); }
 
 // ================= navigation =================
 function go(scr,t){ screen=scr; if(t) tab=t;
@@ -392,7 +405,7 @@ function go(scr,t){ screen=scr; if(t) tab=t;
   if(tab==='draw'){ requestAnimationFrame(()=>{ renderDraw(); if(!view._fitted){ fit(); view._fitted=true; } }); }
   if(tab==='products') renderProducts(); if(tab==='sheet') renderWorksheet(); if(tab==='proposal') renderProposal(); if(tab==='info') renderInfo();
   try{ localStorage.setItem(KEY+'-ui',JSON.stringify({screen,tab,current:DB.current})); }catch(e){} }
-function openProject(id){ DB.current=id; sel={room:null,wall:null,door:null,hole:null}; editing=false; mode='select'; draft=[]; undoStack=[]; $('undo-act').hidden=true; view={x:-4,y:-4,w:44,h:44}; save(); go('project','draw'); }
+function openProject(id){ DB.current=id; sel={room:null,wall:null,door:null,hole:null}; editing=false; mode='select'; draft=[]; undoStack=[]; redoStack=[]; undoUi(); view={x:-4,y:-4,w:44,h:44}; save(); go('project','draw'); }
 document.querySelectorAll('.tabbar button').forEach(b=>b.onclick=()=>{ if(mode!=='select') setMode('select'); go('project',b.dataset.tab); });
 $('to-home').onclick=()=>{ if(mode!=='select') setMode('select'); go('home'); };
 
@@ -415,7 +428,7 @@ $('new-proj').onclick=()=>{ modal(`<h3>New project</h3>
   <label class="f">Job address<input id="np-address" autocomplete="off"></label>
   <label class="f">Phone<input id="np-phone" inputmode="tel" autocomplete="off"></label>
   <div class="srow"><button class="btn primary" id="np-go" style="flex:1">Start measuring</button><button class="btn ghost" data-close>Cancel</button></div>`);
-  setTimeout(()=>$('np-customer').focus(),50);
+  setTimeout(()=>{ const f=$('np-customer'); if(f) f.focus(); },50);
   $('np-go').onclick=()=>{ const c=$('np-customer').value.trim(), a=$('np-address').value.trim(); const p=newProject({customer:c,address:a,phone:$('np-phone').value.trim(),name:c||a||'New project'}); DB.projects.push(p); closeModal(); openProject(p.id); }; };
 
 // ================= modal / confirm / toast =================
@@ -436,6 +449,7 @@ function fit(){ const pj=P(); const pts=pj.rooms.flatMap(r=>r.pts).concat(draft)
   view.w=needW; syncView(); const s=view.w/W; view.x=b.x+b.w/2-view.w/2; view.y=b.y+b.h/2-(H/2+50)*s; renderDraw(true); }
 $('fit').onclick=fit;
 $('undo-act').onclick=()=>{ if(mode==='draw') undoPoint(); else popUndo(); };
+$('redo-act').onclick=()=>popRedo();
 window.addEventListener('resize',()=>{ if(screen==='project'&&tab==='draw'){ syncView(); renderDraw(true); } });
 
 // ================= drawing: render =================
@@ -676,7 +690,7 @@ $('fab').onclick=()=>{ const r=room();
     else if(k==='stairs'){ P().extras.push({id:uid('x'),kind:'stairs',name:'Stairs',qty:13,unit:'step',price:12,labor:28}); save(); go('project','sheet'); toast('Stairs added. Set the step count and prices here.'); } }); };
 
 function freeSpot(){ const all=P().rooms.flatMap(r=>r.pts); return all.length?[snapTo(Math.max(...all.map(q=>q[0]))+3,1), snapTo(Math.min(...all.map(q=>q[1])),1)]:[0,0]; }
-function addRoom(pts,measured,name){ pushUndo('add room'); const r=normRoom({id:uid('r'),name:name||'Room '+(P().rooms.length+1),pts,productId:DB.products[0]?.id||'',base:true,measured,doors:[],holes:[]}); P().rooms.push(r); save(); return r; }
+function addRoom(pts,measured,name){ const r=normRoom({id:uid('r'),name:name||'Room '+(P().rooms.length+1),pts,productId:DB.products[0]?.id||'',base:true,measured,doors:[],holes:[]}); P().rooms.push(r); save(); return r; }
 function addShape(k){ const [x0,y0]=freeSpot();
   const S={L:[[0,0],[16,0],[16,8],[10,8],[10,14],[0,14]], T:[[0,0],[20,0],[20,6],[13,6],[13,16],[7,16],[7,6],[0,6]], U:[[0,0],[6,0],[6,8],[12,8],[12,0],[18,0],[18,14],[0,14]]}[k];
   const r=addRoom(S.map(([x,y])=>[x0+x,y0+y]),S.map(()=>false),k+'-shaped room'); setMode('select'); sel={room:r.id,wall:0,door:null,hole:null}; editing=true; wallPicked=false; kpReset(); fit(); }
@@ -695,10 +709,10 @@ function transformRoom(r,how){ pushUndo(how+' room'); const [cx,cy]=centroid(r.p
   else { r.pts=r.pts.map(([x,y])=>[r96(2*cx-x),y]); r.holes.forEach(o=>{ o.x=r96(2*cx-o.x-o.w); }); }
   save(); renderDraw(); }
 function copyRoom(r){ const c=clone(r); c.id=uid('r'); c.name=r.name+' copy'; const b=bbox(r.pts), dx=snapTo(b.w+2,0.5); c.pts=c.pts.map(([x,y])=>[x+dx,y]); c.holes.forEach(o=>o.x+=dx);
-  pushUndo('copy room'); P().rooms.push(c); sel={room:c.id,wall:null,door:null,hole:null}; editing=false; save(); fit(); }
+  P().rooms.push(c); sel={room:c.id,wall:null,door:null,hole:null}; editing=false; save(); fit(); }
 
 // ================= modes =================
-function setMode(m){ mode=m; draft=[]; draftKeys=new Set(); shotLast=false; hover=null; aim=null; rectPrev=null; kpReset(); if(m!=='select'){ editing=false; } renderDraw(); }
+function setMode(m){ mode=m; setTimeout(undoUi,0); draft=[]; draftKeys=new Set(); shotLast=false; hover=null; aim=null; rectPrev=null; kpReset(); if(m!=='select'){ editing=false; } renderDraw(); }
 // Free draw: where a finger at `raw` puts the next corner (90° or 45° lock, grid lengths, line up with nearby corners)
 function drawSnap(raw){
   const px=view.w/svgW(), tol=24*px, g=gridStep(), last=draft[draft.length-1];
@@ -808,15 +822,17 @@ function pointerEnd(e){ if(e.pointerType!=='mouse') lastCanvasTouch=Date.now(); 
     const nr=addRoom([[x,y],[x+w,y],[x+w,y+h],[x,y+h]],[false,false,false,false]); mode='select'; sel={room:nr.id,wall:0,door:null,hole:null}; editing=true; wallPicked=false; kpReset(); renderDraw(); sheetMsg('Now shoot the top wall, then the right wall. The other two follow.'); return; }
   if(d.type==='pan'){ if(!d.moved && !d.keep && sel.room){ sel={room:null,wall:null,door:null,hole:null}; editing=false; renderDraw(); } return; }
   if(!r) return;
-  if((d.type==='vertex'||d.type==='wall')&&d.moved){ undoStack.push({rooms:clone(P().rooms.map(x=>x===r?Object.assign(clone(x),{pts:d.orig}):x)),label:'reshape room'}); $('undo-act').hidden=false;
+  if((d.type==='vertex'||d.type==='wall')&&d.moved){ pushEntry('reshape '+r.name,Object.assign(clone(r),{pts:d.orig}),P().rooms.indexOf(r));
     r.pts.forEach((_,k)=>{ const a=axisOf(r.pts,k), b=axisOf(d.orig,k); if(!a||!b||Math.abs(a.L-b.L)>1/192) r.measured[k]=false; }); save(); renderDraw(); return; }
-  if(d.type==='room'&&d.moved){ save(); renderDraw(); return; }
+  if(d.type==='room'&&d.moved){ pushEntry('move '+r.name,Object.assign(clone(r),{pts:d.orig,holes:d.holes}),P().rooms.indexOf(r)); save(); renderDraw(); return; }
   if((d.type==='door'||d.type==='hole')&&d.moved){ save(); renderDraw(); } }
 svg.addEventListener('pointerup',pointerEnd); svg.addEventListener('pointercancel',pointerEnd);
 // A finger tap on the drawing must not also "click" whatever panel slides up under the finger (the keypad, a wall chip).
 svg.addEventListener('touchstart',e=>{ lastCanvasTouch=Date.now(); e.preventDefault(); },{passive:false});
 svg.addEventListener('touchend',e=>{ lastCanvasTouch=Date.now(); e.preventDefault(); },{passive:false});
-['click','mousedown','mouseup'].forEach(t=>document.addEventListener(t,e=>{ if(Date.now()-lastCanvasTouch<500 && !svg.contains(e.target)){ e.stopPropagation(); e.preventDefault(); } },true));
+// A real tap on the panel always starts with its own pointerdown there; the phantom one never does.
+let lastOtherDown=0; document.addEventListener('pointerdown',e=>{ if(!svg.contains(e.target)) lastOtherDown=Date.now(); },true);
+['click','mousedown','mouseup'].forEach(t=>document.addEventListener(t,e=>{ if(Date.now()-lastCanvasTouch<700 && lastOtherDown<lastCanvasTouch && !svg.contains(e.target)){ e.stopPropagation(); e.preventDefault(); } },true));
 svg.addEventListener('pointerleave',e=>{ if(mode==='draw'&&e.pointerType==='mouse'&&!drag){ hover=null; aim=null; renderCanvas(); liveUpdate(); } });
 svg.addEventListener('wheel',e=>{ e.preventDefault(); const w=toWorld(e.clientX,e.clientY), f=e.deltaY>0?1.12:1/1.12, nw=Math.min(400,Math.max(5,view.w*f)), k=nw/view.w; view.x=w[0]-(w[0]-view.x)*k; view.y=w[1]-(w[1]-view.y)*k; view.w=nw; renderCanvas(); },{passive:false});
 
